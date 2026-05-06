@@ -1,8 +1,8 @@
-import { useAuthStore } from '@/stores/authStore'
-import { Link } from 'react-router-dom'
+import { useAuthStore } from '@/stores/authStore';
+import { Link } from 'react-router-dom';
 
 export default function Header() {
-  const { user } = useAuthStore()
+  const { user } = useAuthStore();
 
   return (
     <header className="header">
@@ -19,17 +19,31 @@ export default function Header() {
         <div className="flex items-center gap-8">
           <span className="credits-amount">--</span>
           <div style={{ flex: 1 }}>
-            <div className="credits-bar"><div className="credits-bar-fill" /></div>
+            <div className="credits-bar">
+              <div className="credits-bar-fill" />
+            </div>
             <div className="credits-hint">Chargement…</div>
           </div>
         </div>
       </div>
 
       <div className="hdr-actions">
-        <Link to="/notifications" className="notif-btn" aria-label="notifications">🔔</Link>
-        <Link to="/campaigns/new" className="btn-primary">+ Nouvelle campagne</Link>
-        <div className="avatar">{user?.name ? user.name.split(' ').map(n => n[0]).slice(0,2).join('') : 'KM'}</div>
+        <Link to="/notifications" className="notif-btn" aria-label="notifications">
+          🔔
+        </Link>
+        <Link to="/campaigns/new" className="btn-primary">
+          + Nouvelle campagne
+        </Link>
+        <div className="avatar">
+          {user?.name
+            ? user.name
+                .split(' ')
+                .map((n) => n[0])
+                .slice(0, 2)
+                .join('')
+            : 'KM'}
+        </div>
       </div>
     </header>
-  )
+  );
 }

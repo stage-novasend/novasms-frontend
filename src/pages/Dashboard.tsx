@@ -44,7 +44,9 @@ export default function Dashboard() {
         <div className="bg-surface rounded-xl shadow-sm p-6 border border-outline-variant/30">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-on-surface-variant text-sm font-medium mb-2">Crédits disponibles</p>
+              <p className="text-on-surface-variant text-sm font-medium mb-2">
+                Crédits disponibles
+              </p>
               <p className="text-2xl font-bold text-primary">5 000</p>
               <p className="text-xs text-on-surface-variant mt-1">FCFA</p>
             </div>
@@ -59,7 +61,8 @@ export default function Dashboard() {
           Bienvenue, {user?.name || 'Marchand'}! 👋
         </h1>
         <p className="text-on-primary/80 mb-6">
-          Commencez à créer vos campagnes marketing dès maintenant et atteignez vos clients sur tous les canaux.
+          Commencez à créer vos campagnes marketing dès maintenant et atteignez vos clients sur tous
+          les canaux.
         </p>
         <div className="flex gap-4 flex-wrap">
           <button className="px-6 py-3 bg-on-primary text-primary font-semibold rounded-lg hover:shadow-lg transition-all hover:scale-105">
@@ -77,7 +80,9 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold text-on-surface mb-4">Campagnes récentes</h2>
           <div className="text-center py-8">
             <p className="text-on-surface-variant">Aucune campagne créée pour le moment.</p>
-            <p className="text-sm text-on-surface-variant mt-2">Créez votre première campagne pour commencer!</p>
+            <p className="text-sm text-on-surface-variant mt-2">
+              Créez votre première campagne pour commencer!
+            </p>
           </div>
         </div>
 
@@ -85,7 +90,9 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold text-on-surface mb-4">Segments</h2>
           <div className="text-center py-8">
             <p className="text-on-surface-variant">Aucun segment créé pour le moment.</p>
-            <p className="text-sm text-on-surface-variant mt-2">Créez des segments pour cibler vos audiences.</p>
+            <p className="text-sm text-on-surface-variant mt-2">
+              Créez des segments pour cibler vos audiences.
+            </p>
           </div>
         </div>
       </div>

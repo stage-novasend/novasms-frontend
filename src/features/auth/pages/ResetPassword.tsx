@@ -13,7 +13,9 @@ export default function ResetPassword() {
         </div>
         <h1 className="text-2xl font-bold text-secondary mb-4">Réinitialisation du mot de passe</h1>
         <p className="text-on-surface-variant mb-6">Fonctionnalité en cours de développement.</p>
-        <Link to="/login" className="text-primary font-semibold hover:underline">Retour à la connexion</Link>
+        <Link to="/login" className="text-primary font-semibold hover:underline">
+          Retour à la connexion
+        </Link>
       </div>
     </div>
   );

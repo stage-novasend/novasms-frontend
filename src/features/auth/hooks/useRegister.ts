@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import axios from 'axios'
-import { useNavigate } from 'react-router-dom'
-import { z } from 'zod'
+import { useState } from 'react';
+import axios from 'axios';
+import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 
 export const RegisterSchema = z.object({
   nom: z.string().min(2, 'Nom trop court'),
@@ -9,9 +9,9 @@ export const RegisterSchema = z.object({
   nomBoutique: z.string().min(2, 'Nom boutique trop court'),
   pays: z.string().min(1, 'Pays requis'),
   motDePasse: z.string().min(8, 'Mot de passe trop court'),
-})
+});
 
-export type RegisterDto = z.infer<typeof RegisterSchema>
+export type RegisterDto = z.infer<typeof RegisterSchema>;
 
 export function useRegister() {
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +23,7 @@ export function useRegister() {
     setError(null);
     try {
       const res = await axios.post('/api/auth/register', data, {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
       });
       if (res.data.success) {
         navigate('/confirm-email', { state: { email: data.email } });

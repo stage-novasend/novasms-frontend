@@ -22,23 +22,30 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const { status } = error.response || {};
-    
+
     // Si 401 et pas déjà en train de retry
     if (status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-      
+
       const { refreshToken, setTokens, logout } = useAuthStore.getState();
-      
+
       if (refreshToken) {
         try {
           // Appel pour refresh le token
           const res = await axios.post('http://localhost:3000/api/auth/refresh', {
             refreshToken,
           });
-          
+
           if (res.data.success) {
             // Mettre à jour les tokens dans le store
-            setTokens(res.data.accessToken, res.data.refreshToken, useAuthStore.getState().user!);
+            const currentUser = useAuthStore.getState().user;
+            if (currentUser) {
+              setTokens(res.data.accessToken, res.data.refreshToken, currentUser);
+            } else {
+              // si pas d'utilisateur, on déconnecte pour éviter l'état incohérent
+              useAuthStore.getState().logout();
+              window.location.href = '/login';
+            }
             // Retry la requête originale avec le nouveau token
             originalRequest.headers.Authorization = `Bearer ${res.data.accessToken}`;
             return api(originalRequest);
@@ -54,9 +61,9 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    
+
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

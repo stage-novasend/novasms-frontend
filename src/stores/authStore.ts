@@ -19,7 +19,7 @@ export type AuthState = {
   requiresTwoFactor: boolean;
   twoFactorToken: string | null;
   twoFactorMessage: string | null;
-  
+
   // Actions
   login: (email: string, password: string) => Promise<boolean>;
   verifyTwoFactor: (twoFactorToken: string, code: string) => Promise<boolean>;
@@ -51,9 +51,9 @@ export const useAuthStore = create<AuthState>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, motDePasse: password }),
           });
-          
+
           const data = await res.json();
-          
+
           if (!res.ok) {
             set({
               error: data.message || 'Échec de la connexion',
@@ -75,10 +75,10 @@ export const useAuthStore = create<AuthState>()(
             });
             return false;
           }
-          
+
           // ✅ Calculer isFirstLogin depuis le backend
           const onboardingCompleted = data.account?.onboardingCompleted ?? false;
-          
+
           set({
             accessToken: data.accessToken,
             refreshToken: data.refreshToken,
@@ -180,19 +180,19 @@ export const useAuthStore = create<AuthState>()(
       markOnboardingCompleted: async () => {
         const { user, accessToken } = get();
         if (!user?.id || !accessToken) return;
-        
+
         try {
           await fetch('http://localhost:3000/api/auth/onboarding/complete', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${accessToken}`,
+              Authorization: `Bearer ${accessToken}`,
             },
           });
         } catch (err) {
           console.error('Failed to mark onboarding completed', err);
         }
-        
+
         // Mettre à jour l'état local
         set((state) => ({
           user: state.user ? { ...state.user, onboardingCompleted: true } : null,
@@ -210,6 +210,6 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
         isFirstLogin: state.isFirstLogin,
       }),
-    }
-  )
+    },
+  ),
 );

@@ -17,7 +17,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   // ✅ Ajouter isFirstLogin dans le destructuring
   const { login, error, clearError, isLoading, isFirstLogin } = useAuthStore();
-  
+
   const [formData, setFormData] = useState<LoginFormData>({ email: '', motDePasse: '' });
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -44,11 +44,11 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    
+
     if (!validate()) return;
-    
+
     const success = await login(formData.email, formData.motDePasse);
-    
+
     if (success) {
       // ✅ REDIRECTION CONDITIONNELLE : Wizard si première connexion, sinon Dashboard
       if (isFirstLogin) {
@@ -114,9 +114,7 @@ export default function LoginPage() {
 
           {/* Password */}
           <div>
-            <label className="block text-sm font-medium text-on-surface mb-2">
-              Mot de passe
-            </label>
+            <label className="block text-sm font-medium text-on-surface mb-2">Mot de passe</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant" />
               <input

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
 };
 
 export default function Produit() {
@@ -21,30 +21,62 @@ export default function Produit() {
   return (
     <div className="min-h-screen bg-background text-on-surface font-body antialiased">
       {/* NAVBAR */}
-      <nav className={`h-20 w-full fixed top-0 left-0 z-50 glass-header border-b border-outline-variant/30 px-6 lg:px-12 flex items-center justify-between transition-all duration-300 ${isScrolled ? 'backdrop-blur-md' : ''}`}>
+      <nav
+        className={`h-20 w-full fixed top-0 left-0 z-50 glass-header border-b border-outline-variant/30 px-6 lg:px-12 flex items-center justify-between transition-all duration-300 ${isScrolled ? 'backdrop-blur-md' : ''}`}
+      >
         <div className="flex items-center gap-12">
           {/* Logo */}
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
               <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>
             </div>
-            <span className="font-headline font-extrabold text-2xl tracking-tight text-secondary">NovaSMS</span>
+            <span className="font-headline font-extrabold text-2xl tracking-tight text-secondary">
+              NovaSMS
+            </span>
           </div>
-          
+
           {/* Desktop Navigation */}
           <div className="hidden lg:flex gap-8">
-            <a href="/produit" className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors">Produit</a>
-            <a href="/solutions" className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors">Solutions</a>
-            <a href="/tarifs" className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors">Tarifs</a>
-            <a href="/ressources" className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors">Ressources</a>
+            <a
+              href="/produit"
+              className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors"
+            >
+              Produit
+            </a>
+            <a
+              href="/solutions"
+              className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors"
+            >
+              Solutions
+            </a>
+            <a
+              href="/tarifs"
+              className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors"
+            >
+              Tarifs
+            </a>
+            <a
+              href="/ressources"
+              className="text-sm font-semibold text-secondary/70 hover:text-primary transition-colors"
+            >
+              Ressources
+            </a>
           </div>
         </div>
 
         <div className="flex items-center gap-4">
-          <a href="/login" className="text-sm font-bold text-secondary hover:bg-surface-variant/50 px-5 py-2.5 rounded-lg transition-all">Connexion</a>
-          <a href="/register" className="bg-primary text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:brightness-110 transition-all shadow-lg shadow-primary/20">
+          <a
+            href="/login"
+            className="text-sm font-bold text-secondary hover:bg-surface-variant/50 px-5 py-2.5 rounded-lg transition-all"
+          >
+            Connexion
+          </a>
+          <a
+            href="/register"
+            className="bg-primary text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+          >
             Inscription
           </a>
         </div>
@@ -53,9 +85,9 @@ export default function Produit() {
       {/* Hero Produit */}
       <main className="pt-32 pb-24 px-6 lg:px-12">
         <div className="max-w-7xl mx-auto">
-          <motion.div 
-            initial="hidden" 
-            animate="visible" 
+          <motion.div
+            initial="hidden"
+            animate="visible"
             variants={fadeInUp}
             className="text-center max-w-3xl mx-auto mb-20"
           >
@@ -63,7 +95,8 @@ export default function Produit() {
               Une plateforme tout-en-un pour votre marketing
             </h1>
             <p className="text-xl text-on-surface-variant leading-relaxed">
-              SMS, Email, WhatsApp et automatisations avancées. Tout ce dont vous avez besoin pour engager vos clients avec précision.
+              SMS, Email, WhatsApp et automatisations avancées. Tout ce dont vous avez besoin pour
+              engager vos clients avec précision.
             </p>
           </motion.div>
 
@@ -72,42 +105,67 @@ export default function Produit() {
             {[
               {
                 icon: <Zap className="w-8 h-8" />,
-                title: "SMS Ultra-Rapide",
+                title: 'SMS Ultra-Rapide',
                 desc: "Délivrance en moins de 5 secondes avec un taux d'ouverture de 98%. Parfait pour les communications urgentes et les promotions flash.",
-                features: ["Routage premium", "Liens trackés", "STOP SMS automatique", "Personnalisation avancée"]
+                features: [
+                  'Routage premium',
+                  'Liens trackés',
+                  'STOP SMS automatique',
+                  'Personnalisation avancée',
+                ],
               },
               {
                 icon: <Mail className="w-8 h-8" />,
-                title: "Email Marketing",
-                desc: "Créez des campagnes email professionnelles avec notre éditeur drag-and-drop et automatisez vos parcours clients.",
-                features: ["Templates responsive", "A/B testing", "Segmentation avancée", "Analytics détaillés"]
+                title: 'Email Marketing',
+                desc: 'Créez des campagnes email professionnelles avec notre éditeur drag-and-drop et automatisez vos parcours clients.',
+                features: [
+                  'Templates responsive',
+                  'A/B testing',
+                  'Segmentation avancée',
+                  'Analytics détaillés',
+                ],
               },
               {
                 icon: <MessageSquare className="w-8 h-8" />,
-                title: "WhatsApp Business",
+                title: 'WhatsApp Business',
                 desc: "Engagez des conversations bidirectionnelles riches avec l'API officielle WhatsApp Business.",
-                features: ["Messages média", "Boutons interactifs", "Chatbots intelligents", "Support client 24/7"]
+                features: [
+                  'Messages média',
+                  'Boutons interactifs',
+                  'Chatbots intelligents',
+                  'Support client 24/7',
+                ],
               },
               {
                 icon: <BarChart3 className="w-8 h-8" />,
-                title: "Analytics Avancés",
-                desc: "Suivez chaque campagne en temps réel avec des rapports détaillés et des insights actionnables.",
-                features: ["Taux d'ouverture", "Taux de clic", "Heatmaps", "Export CSV/PDF"]
+                title: 'Analytics Avancés',
+                desc: 'Suivez chaque campagne en temps réel avec des rapports détaillés et des insights actionnables.',
+                features: ["Taux d'ouverture", 'Taux de clic', 'Heatmaps', 'Export CSV/PDF'],
               },
               {
                 icon: <Clock className="w-8 h-8" />,
-                title: "Automatisations",
-                desc: "Créez des workflows complexes basés sur le comportement de vos contacts pour maximiser vos conversions.",
-                features: ["Déclencheurs multiples", "Conditions avancées", "Workflows visuels", "Tests A/B intégrés"]
+                title: 'Automatisations',
+                desc: 'Créez des workflows complexes basés sur le comportement de vos contacts pour maximiser vos conversions.',
+                features: [
+                  'Déclencheurs multiples',
+                  'Conditions avancées',
+                  'Workflows visuels',
+                  'Tests A/B intégrés',
+                ],
               },
               {
                 icon: <Shield className="w-8 h-8" />,
-                title: "Sécurité & Conformité",
-                desc: "Vos données sont protégées avec les normes les plus strictes du secteur (RGPD, PCI-DSS).",
-                features: ["Chiffrement TLS 1.3", "2FA obligatoire", "Audit logs", "Backup automatique"]
-              }
+                title: 'Sécurité & Conformité',
+                desc: 'Vos données sont protégées avec les normes les plus strictes du secteur (RGPD, PCI-DSS).',
+                features: [
+                  'Chiffrement TLS 1.3',
+                  '2FA obligatoire',
+                  'Audit logs',
+                  'Backup automatique',
+                ],
+              },
             ].map((feature, i) => (
-              <motion.div 
+              <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
@@ -118,11 +176,16 @@ export default function Produit() {
                 <div className="w-16 h-16 rounded-2xl bg-surface-variant flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all mb-6">
                   {feature.icon}
                 </div>
-                <h3 className="font-headline text-2xl font-bold text-secondary mb-3">{feature.title}</h3>
+                <h3 className="font-headline text-2xl font-bold text-secondary mb-3">
+                  {feature.title}
+                </h3>
                 <p className="text-on-surface-variant leading-relaxed mb-6">{feature.desc}</p>
                 <ul className="space-y-2">
                   {feature.features.map((feat, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm font-semibold text-secondary/70">
+                    <li
+                      key={idx}
+                      className="flex items-center gap-2 text-sm font-semibold text-secondary/70"
+                    >
                       <Check className="w-4 h-4 text-primary" /> {feat}
                     </li>
                   ))}
@@ -132,7 +195,7 @@ export default function Produit() {
           </div>
 
           {/* CTA Section */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -147,13 +210,13 @@ export default function Produit() {
                 Commencez votre essai gratuit de 14 jours. Aucune carte de crédit requise.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <button 
+                <button
                   onClick={() => navigate('/register')}
                   className="bg-primary text-white font-bold py-5 px-12 rounded-xl text-lg hover:brightness-110 transition-all shadow-2xl shadow-primary/30"
                 >
                   Démarrer gratuitement
                 </button>
-                <button 
+                <button
                   onClick={() => navigate('/tarifs')}
                   className="bg-white/10 text-white font-bold py-5 px-10 rounded-xl text-lg hover:bg-white/20 transition-all backdrop-blur-sm border border-white/20"
                 >
@@ -171,15 +234,23 @@ export default function Produit() {
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
               <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
               </svg>
             </div>
-            <span className="font-headline font-extrabold text-xl tracking-tight text-secondary">NovaSMS</span>
+            <span className="font-headline font-extrabold text-xl tracking-tight text-secondary">
+              NovaSMS
+            </span>
           </div>
           <div className="flex gap-8 text-sm font-semibold text-secondary/60">
-            <a href="#" className="hover:text-primary transition-colors">Confidentialité</a>
-            <a href="#" className="hover:text-primary transition-colors">Conditions</a>
-            <a href="#" className="hover:text-primary transition-colors">Support</a>
+            <a href="#" className="hover:text-primary transition-colors">
+              Confidentialité
+            </a>
+            <a href="#" className="hover:text-primary transition-colors">
+              Conditions
+            </a>
+            <a href="#" className="hover:text-primary transition-colors">
+              Support
+            </a>
           </div>
           <p className="text-sm text-secondary/40">© 2026 NovaSMS Inc.</p>
         </div>

@@ -183,9 +183,18 @@ export default function Wizard() {
                   Prévisualisation
                 </p>
                 <div className="space-y-2 text-sm text-on-surface">
-                  <div className="flex justify-between"><span>Nom</span><span>Extrait</span></div>
-                  <div className="flex justify-between"><span>Email</span><span>Extrait</span></div>
-                  <div className="flex justify-between"><span>Téléphone</span><span>Extrait</span></div>
+                  <div className="flex justify-between">
+                    <span>Nom</span>
+                    <span>Extrait</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Email</span>
+                    <span>Extrait</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Téléphone</span>
+                    <span>Extrait</span>
+                  </div>
                 </div>
               </div>
 
@@ -226,7 +235,9 @@ export default function Wizard() {
                       }`}
                     >
                       <span className="font-semibold">{channel}</span>
-                      <span className={`w-5 h-5 rounded-full border flex items-center justify-center ${active ? 'border-primary bg-primary text-white' : 'border-outline-variant'}`}>
+                      <span
+                        className={`w-5 h-5 rounded-full border flex items-center justify-center ${active ? 'border-primary bg-primary text-white' : 'border-outline-variant'}`}
+                      >
                         {active ? <Check className="w-3 h-3" /> : null}
                       </span>
                     </button>
@@ -240,10 +251,19 @@ export default function Wizard() {
                 Aperçu de configuration
               </p>
               <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                <div><span className="text-on-surface-variant">Rôle:</span> {data.role}</div>
-                <div><span className="text-on-surface-variant">Secteur:</span> {data.sector}</div>
-                <div><span className="text-on-surface-variant">Import:</span> {data.contactsSource}</div>
-                <div><span className="text-on-surface-variant">Canaux:</span> {data.primaryChannels.join(', ')}</div>
+                <div>
+                  <span className="text-on-surface-variant">Rôle:</span> {data.role}
+                </div>
+                <div>
+                  <span className="text-on-surface-variant">Secteur:</span> {data.sector}
+                </div>
+                <div>
+                  <span className="text-on-surface-variant">Import:</span> {data.contactsSource}
+                </div>
+                <div>
+                  <span className="text-on-surface-variant">Canaux:</span>{' '}
+                  {data.primaryChannels.join(', ')}
+                </div>
               </div>
             </div>
           </div>
@@ -305,7 +325,9 @@ export default function Wizard() {
         <div className="text-xl font-black text-primary tracking-tighter">NovaSMS</div>
         <div className="flex items-center gap-3 text-on-surface-variant">
           <Cloud className="w-5 h-5" />
-          <span className="text-xs font-semibold uppercase tracking-[0.2em]">Toutes les modifications sont enregistrées</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.2em]">
+            Toutes les modifications sont enregistrées
+          </span>
         </div>
       </header>
 
@@ -318,12 +340,18 @@ export default function Wizard() {
 
               return (
                 <div key={step.number} className="flex flex-col gap-3">
-                  <div className={`h-1.5 rounded-full ${isActive ? 'bg-primary' : 'bg-surface-container-highest'}`}></div>
+                  <div
+                    className={`h-1.5 rounded-full ${isActive ? 'bg-primary' : 'bg-surface-container-highest'}`}
+                  ></div>
                   <div className="flex items-center gap-2">
-                    <span className={`font-bold text-sm ${isCurrent ? 'text-primary' : 'text-on-surface-variant'}`}>
+                    <span
+                      className={`font-bold text-sm ${isCurrent ? 'text-primary' : 'text-on-surface-variant'}`}
+                    >
                       {String(step.number).padStart(2, '0')}
                     </span>
-                    <span className={`text-xs uppercase tracking-[0.2em] ${isCurrent ? 'text-on-surface' : 'text-on-surface-variant'}`}>
+                    <span
+                      className={`text-xs uppercase tracking-[0.2em] ${isCurrent ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                    >
                       {step.title}
                     </span>
                   </div>
@@ -339,23 +367,36 @@ export default function Wizard() {
                 L'architecte de votre identité.
               </h1>
               <p className="text-lg leading-relaxed text-on-surface-variant max-w-sm">
-                Configurez votre espace de travail en 4 étapes pour préparer vos premières campagnes multicanales.
+                Configurez votre espace de travail en 4 étapes pour préparer vos premières campagnes
+                multicanales.
               </p>
 
               <div className="mt-6 rounded-2xl border border-outline-variant/20 bg-surface p-5 shadow-sm">
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant mb-3">RG-07 Protocol</p>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant mb-3">
+                  RG-07 Protocol
+                </p>
                 <div className="space-y-3 text-sm text-on-surface-variant">
-                  <div className="flex gap-3"><Check className="w-4 h-4 text-primary mt-0.5" /> Profil marchand</div>
-                  <div className="flex gap-3"><Check className="w-4 h-4 text-primary mt-0.5" /> Import des contacts</div>
-                  <div className="flex gap-3"><Check className="w-4 h-4 text-primary mt-0.5" /> Sélection des canaux</div>
-                  <div className="flex gap-3"><Check className="w-4 h-4 text-primary mt-0.5" /> Première campagne</div>
+                  <div className="flex gap-3">
+                    <Check className="w-4 h-4 text-primary mt-0.5" /> Profil marchand
+                  </div>
+                  <div className="flex gap-3">
+                    <Check className="w-4 h-4 text-primary mt-0.5" /> Import des contacts
+                  </div>
+                  <div className="flex gap-3">
+                    <Check className="w-4 h-4 text-primary mt-0.5" /> Sélection des canaux
+                  </div>
+                  <div className="flex gap-3">
+                    <Check className="w-4 h-4 text-primary mt-0.5" /> Première campagne
+                  </div>
                 </div>
               </div>
             </aside>
 
             <section className="lg:col-span-8 rounded-3xl border border-outline-variant/30 bg-surface shadow-2xl p-8 lg:p-10">
               <div className="mb-8">
-                <h2 className="text-3xl font-bold text-on-surface mb-2">{steps[currentStep - 1].title}</h2>
+                <h2 className="text-3xl font-bold text-on-surface mb-2">
+                  {steps[currentStep - 1].title}
+                </h2>
                 <p className="text-on-surface-variant">{steps[currentStep - 1].description}</p>
               </div>
 

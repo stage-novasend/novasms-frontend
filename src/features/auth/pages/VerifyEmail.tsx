@@ -23,7 +23,7 @@ export default function VerifyEmail() {
           headers: { 'Content-Type': 'application/json' },
         });
         const json = await res.json();
-        
+
         if (json.success) {
           setStatus('success');
           setMessage('Votre email est confirmé. Redirection...');
@@ -51,15 +51,17 @@ export default function VerifyEmail() {
           <div className="w-8 h-8 bg-primary rounded flex items-center justify-center">
             <Bolt className="w-5 h-5 text-white" />
           </div>
-          <span className="font-headline font-extrabold text-xl tracking-tight text-secondary">NovaSMS</span>
+          <span className="font-headline font-extrabold text-xl tracking-tight text-secondary">
+            NovaSMS
+          </span>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 flex items-center justify-center px-6 lg:px-12 py-12">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }} 
-          animate={{ opacity: 1, scale: 1 }} 
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
           className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-outline-variant/30 p-8 lg:p-12 text-center"
         >
           {/* Loading State */}
@@ -104,14 +106,14 @@ export default function VerifyEmail() {
               </h1>
               <p className="text-on-surface-variant mb-6">{message}</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Link 
-                  to="/register" 
+                <Link
+                  to="/register"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary text-white font-semibold rounded-xl hover:brightness-110 transition-all"
                 >
                   Réessayer l'inscription
                 </Link>
-                <Link 
-                  to="/login" 
+                <Link
+                  to="/login"
                   className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-surface text-secondary font-semibold rounded-xl hover:bg-surface-variant transition-all border border-outline-variant"
                 >
                   Se connecter
@@ -124,7 +126,12 @@ export default function VerifyEmail() {
 
       {/* Footer */}
       <footer className="py-6 text-center text-xs text-secondary/40 border-t border-outline-variant/20 bg-white">
-        <p>Copyright 2026 NovaSMS — <Link to="/" className="hover:text-primary">Retour au site</Link></p>
+        <p>
+          Copyright 2026 NovaSMS —{' '}
+          <Link to="/" className="hover:text-primary">
+            Retour au site
+          </Link>
+        </p>
       </footer>
     </div>
   );

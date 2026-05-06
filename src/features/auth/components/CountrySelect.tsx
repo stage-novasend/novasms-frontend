@@ -1,16 +1,16 @@
-export function CountrySelect({ 
-  value, 
-  onChange, 
-  error 
-}: { 
-  value: string; 
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; 
-  error?: string 
+export function CountrySelect({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  error?: string;
 }) {
   return (
     <div>
-      <select 
-        value={value} 
+      <select
+        value={value}
         onChange={onChange}
         className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
       >
