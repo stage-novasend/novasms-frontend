@@ -91,7 +91,7 @@ export const useAuthStore = create<AuthState>()(
             twoFactorMessage: null,
           });
           return true;
-        } catch (err) {
+        } catch {
           set({
             error: 'Erreur de connexion au serveur',
             isLoading: false,
@@ -137,7 +137,7 @@ export const useAuthStore = create<AuthState>()(
             isFirstLogin: !onboardingCompleted,
           });
           return true;
-        } catch (err) {
+        } catch {
           set({
             error: 'Erreur de connexion au serveur',
             isLoading: false,

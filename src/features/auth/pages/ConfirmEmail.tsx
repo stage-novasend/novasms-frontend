@@ -10,7 +10,11 @@ export default function ConfirmEmail() {
   const [isResending, setIsResending] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
-  const [draftEmail, setDraftEmail] = useState('');
+  const [draftEmail, setDraftEmail] = useState(() => {
+    const emailFromStorage = localStorage.getItem('novasms-pending-confirmation-email') || '';
+    const emailFromLocation = (window.history.state?.usr as { email?: string } | undefined)?.email;
+    return emailFromLocation || emailFromStorage;
+  });
 
   const emailFromState = (location.state as { email?: string } | null)?.email;
   const email = emailFromState || localStorage.getItem('novasms-pending-confirmation-email') || '';
@@ -19,12 +23,6 @@ export default function ConfirmEmail() {
   useEffect(() => {
     logout();
   }, [logout]);
-
-  useEffect(() => {
-    if (email) {
-      setDraftEmail(email);
-    }
-  }, [email]);
 
   const handleResend = async () => {
     const targetEmail = (isEditingEmail ? draftEmail : email).trim();

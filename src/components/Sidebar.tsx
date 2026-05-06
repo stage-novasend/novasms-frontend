@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -163,7 +163,7 @@ function Item({
   collapsed,
 }: {
   to: string;
-  icon: string;
+  icon: ReactNode;
   label: string;
   badge?: string;
   collapsed: boolean;

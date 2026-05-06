@@ -81,7 +81,7 @@ export default function Security() {
         } else if (res && res.message) {
           setMessage({ type: 'error', text: res.message });
         }
-      } catch (e) {
+      } catch {
         setMessage({ type: 'error', text: "Impossible de récupérer l'état du compte." });
       }
     };
@@ -114,7 +114,7 @@ export default function Security() {
       } else {
         setMessage({ type: 'error', text: res.message || 'Erreur lors de la génération.' });
       }
-    } catch (e) {
+    } catch {
       setMessage({ type: 'error', text: 'Erreur de connexion au serveur.' });
     } finally {
       setLoading(false);
@@ -152,7 +152,7 @@ export default function Security() {
       } else {
         setMessage({ type: 'error', text: res.message || 'Code invalide.' });
       }
-    } catch (e) {
+    } catch {
       setMessage({ type: 'error', text: 'Erreur lors de la vérification.' });
     } finally {
       setLoading(false);
@@ -179,7 +179,7 @@ export default function Security() {
       } else {
         setMessage({ type: 'error', text: res.message || 'Erreur.' });
       }
-    } catch (e) {
+    } catch {
       setMessage({ type: 'error', text: 'Erreur de connexion.' });
     } finally {
       setLoading(false);
