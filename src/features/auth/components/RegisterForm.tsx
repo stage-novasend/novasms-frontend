@@ -1,4 +1,4 @@
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
@@ -37,14 +37,15 @@ export default function RegisterForm() {
     register,
     handleSubmit,
     formState: { errors },
-    watch,
+    control,
     setValue,
   } = useForm<RegisterDto>({
     resolver: zodResolver(RegisterSchema),
     defaultValues: { pays: 'CI', email: initialEmail },
   });
 
-  const password = watch('motDePasse');
+  const password = useWatch({ control, name: 'motDePasse' });
+  const selectedCountry = useWatch({ control, name: 'pays' });
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
   const onSubmit = async (data: RegisterDto) => {
@@ -124,7 +125,7 @@ export default function RegisterForm() {
         <div>
           <label className="block text-sm font-semibold text-on-surface mb-1">Pays</label>
           <CountrySelect
-            value={watch('pays')}
+            value={selectedCountry}
             onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setValue('pays', e.target.value)}
             error={errors.pays?.message}
           />

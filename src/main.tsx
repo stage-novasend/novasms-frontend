@@ -27,6 +27,8 @@ import Dashboard from './pages/Dashboard';
 import Wizard from './pages/Wizard.tsx';
 import Security from './features/account/pages/Security';
 import Contacts from './pages/Contacts';
+import Campaigns from './pages/Campaigns';
+import CampaignEditor from './pages/CampaignEditor';
 const ContactDetailLazy = React.lazy(() => import('./features/contacts/pages/ContactDetail'));
 
 import './index.css';
@@ -63,6 +65,9 @@ ReactDOM.createRoot(rootElement).render(
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/contacts" element={<Contacts />} />
+          <Route path="/campaigns" element={<Campaigns />} />
+          <Route path="/campaigns/new" element={<CampaignEditor />} />
+          <Route path="/campaigns/:id" element={<CampaignEditor />} />
           <Route
             path="/contacts/:id"
             element={
