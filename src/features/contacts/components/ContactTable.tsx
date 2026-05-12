@@ -1,0 +1,882 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Search, Filter, ChevronLeft, ChevronRight, 
+  MoreVertical, Mail, Phone, User, Calendar, 
+  CheckCircle, XCircle, Loader2, Plus, X, Download
+} from 'lucide-react';
+import { useAuthStore } from '@/stores/authStore';
+import { contactsApi } from '@/api/contacts';
+import type {
+  Contact,
+  ContactFilter,
+  SegmentCriterion,
+  SegmentLogic,
+  SegmentWithContacts,
+} from '../types/contact';
+
+type ContactTableProps = {
+  onContactClick?: (contact: Contact) => void;
+  onImportClick?: () => void;
+};
+
+export default function ContactTable({ onContactClick, onImportClick }: ContactTableProps) {
+  const { accessToken } = useAuthStore();
+  
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  
+  const [filters, setFilters] = useState<ContactFilter>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<Array<{key: string; value: string; label: string}>>([]);
+  const [segmentName, setSegmentName] = useState('Nouveau segment');
+  const [segmentLogic, setSegmentLogic] = useState<SegmentLogic>('AND');
+  const [segmentCriteria, setSegmentCriteria] = useState<SegmentCriterion[]>([
+    { field: 'tag', operator: 'equals', value: '' },
+  ]);
+  const [previewCount, setPreviewCount] = useState(0);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const previewAbortRef = useRef<AbortController | null>(null);
+  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [segmentError, setSegmentError] = useState<string | null>(null);
+  const [savingSegment, setSavingSegment] = useState(false);
+  const [segments, setSegments] = useState<SegmentWithContacts[]>([]);
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string>('');
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  const formatSegmentFormula = (criteria: SegmentWithContacts['criteria']) => {
+    const payload = criteria as { logic?: string; rules?: Array<{ field?: string; operator?: string; value?: unknown }> };
+    const logic = payload?.logic === 'OR' ? 'OU' : 'ET';
+    const rules = Array.isArray(payload?.rules) ? payload.rules : [];
+    if (rules.length === 0) return 'Aucune condition';
+
+    const fieldLabels: Record<string, string> = {
+      tag: 'Tag',
+      status: 'Statut',
+      email: 'Email',
+      phone: 'Téléphone',
+      firstName: 'Prénom',
+      lastName: 'Nom',
+      location: 'Localisation',
+      createdAt: 'Date création',
+      lastPurchaseDate: 'Dernier achat',
+    };
+
+    const operatorLabels: Record<string, string> = {
+      equals: 'égal à',
+      contains: 'contient',
+      gt: '>',
+      lt: '<',
+      gte: '>=',
+      lte: '<=',
+      in: 'dans',
+      notIn: 'pas dans',
+      notEquals: 'différent de',
+    };
+
+    const parts = rules.map((rule) => {
+      const field = fieldLabels[rule.field || ''] || 'Champ';
+      const operator = operatorLabels[rule.operator || ''] || 'contient';
+      const value = Array.isArray(rule.value) ? rule.value.join(', ') : String(rule.value ?? '').trim();
+      return `${field} ${operator} ${value || '-'}`;
+    });
+
+    return `${logic}: ${parts.join(` ${logic} `)}`;
+  };
+
+  // Fetch contacts avec pagination cursor-based (RG-53)
+  const fetchContacts = useCallback(async (nextCursor?: string | null, reset: boolean = false) => {
+    if (!accessToken) return;
+    
+    setIsLoading(true);
+    try {
+      const params: {
+        limit: number;
+        cursor?: string;
+        search?: string;
+      } & ContactFilter = {
+        limit: 20,
+        ...(searchQuery && { search: searchQuery }),
+        ...filters,
+      };
+      
+      if (nextCursor) params.cursor = nextCursor;
+      
+      const response = await contactsApi.list(params);
+      
+      if (reset) {
+        setContacts(response.data);
+      } else {
+        setContacts(prev => nextCursor ? [...prev, ...response.data] : response.data);
+      }
+      
+      setTotal(response.total);
+      setCursor(response.nextCursor);
+      setHasMore(!!response.nextCursor);
+      
+    } catch (error) {
+      console.error('Failed to fetch contacts:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken, filters, searchQuery]);
+
+  // Initial load
+  useEffect(() => {
+    fetchContacts(null, true);
+  }, [fetchContacts]);
+
+  const loadSegments = useCallback(async () => {
+    if (!accessToken) return;
+    try {
+      const data = await contactsApi.listSegmentsWithContacts();
+      setSegments(data);
+    } catch {
+      // Non bloquant pour le tableau contacts
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    loadSegments();
+  }, [loadSegments]);
+
+  // Debounced preview avec AbortController (RG-52: Performance)
+  useEffect(() => {
+    // Annuler la requête précédente et le timeout
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+    }
+    if (previewTimeoutRef.current) {
+      clearTimeout(previewTimeoutRef.current);
+    }
+
+    // Si aucun token, skip
+    if (!accessToken) return;
+
+    // Créer un nouveau AbortController pour cette requête
+    const abortController = new AbortController();
+    previewAbortRef.current = abortController;
+
+    // Attendre 300ms avant de faire la requête (debounce)
+    const timeout = setTimeout(async () => {
+      setIsPreviewLoading(true);
+      try {
+        const response = await contactsApi.previewSegment(segmentLogic, segmentCriteria);
+        
+        // Vérifier que cette requête n'a pas été annulée
+        if (!abortController.signal.aborted) {
+          setPreviewCount(response.count || 0);
+        }
+      } catch (error: unknown) {
+        // Ignorer les erreurs d'annulation
+        if (!abortController.signal.aborted) {
+          const message = error instanceof Error ? error.message : 'Erreur de prévisualisation';
+          console.warn('Preview error:', message);
+          setPreviewCount(0);
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsPreviewLoading(false);
+        }
+      }
+    }, 300);
+
+    previewTimeoutRef.current = timeout;
+
+    // Cleanup
+    return () => {
+      if (previewTimeoutRef.current) {
+        clearTimeout(previewTimeoutRef.current);
+      }
+    };
+  }, [accessToken, segmentLogic, segmentCriteria]);
+
+  // Handlers
+  const handleNextPage = () => {
+    if (hasMore && !isLoading && cursor) {
+      fetchContacts(cursor, false);
+    }
+  };
+
+  const handlePrevPage = () => {
+    setCursor(null);
+    fetchContacts(null, true);
+  };
+
+  const removeFilter = (key: string) => {
+    setFilters(prev => {
+      const { [key as keyof ContactFilter]: _removed, ...rest } = prev;
+      void _removed;
+      return rest;
+    });
+    setActiveFilters(prev => prev.filter(f => f.key !== key));
+  };
+
+  const clearAllFilters = () => {
+    setFilters({});
+    setActiveFilters([]);
+    setSearchQuery('');
+  };
+
+  const toggleSelectContact = (id: string) => {
+    setSelectedContactIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedContactIds.size === contacts.length && contacts.length > 0) {
+      setSelectedContactIds(new Set());
+    } else {
+      setSelectedContactIds(new Set(contacts.map(c => c.id)));
+    }
+  };
+
+  const deleteContact = async (id: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce contact ?')) return;
+    
+    try {
+      setIsDeleting(true);
+      await contactsApi.delete(id);
+      setContacts(prev => prev.filter(c => c.id !== id));
+      setSelectedContactIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+      setOpenMenuId(null);
+    } catch (error) {
+      console.error('Failed to delete contact:', error);
+      alert('Erreur lors de la suppression du contact');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const deleteSelectedContacts = async () => {
+    if (selectedContactIds.size === 0) return;
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer ${selectedContactIds.size} contact(s) ?`)) return;
+
+    try {
+      setIsDeleting(true);
+      for (const id of selectedContactIds) {
+        await contactsApi.delete(id);
+      }
+      setContacts(prev => prev.filter(c => !selectedContactIds.has(c.id)));
+      setSelectedContactIds(new Set());
+    } catch (error) {
+      console.error('Failed to delete contacts:', error);
+      alert('Erreur lors de la suppression des contacts');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const updateCriterion = <K extends keyof SegmentCriterion>(
+    index: number,
+    key: K,
+    value: SegmentCriterion[K],
+  ) => {
+    setSegmentCriteria((prev) =>
+      prev.map((criterion, i) =>
+        i === index
+          ? {
+              ...criterion,
+              [key]: value,
+            }
+          : criterion,
+      ),
+    );
+  };
+
+  const addCriterion = () => {
+    setSegmentCriteria((prev) => [
+      ...prev,
+      { field: 'tag', operator: 'equals', value: '' },
+    ]);
+  };
+
+  const removeCriterion = (index: number) => {
+    setSegmentCriteria((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  };
+
+  const saveSegment = async () => {
+    const name = segmentName.trim();
+    if (!name) {
+      setSegmentError('Le nom du segment est requis');
+      return;
+    }
+
+    setSavingSegment(true);
+    setSegmentError(null);
+    try {
+      const result = await contactsApi.createSegment(name, segmentLogic, segmentCriteria);
+      await loadSegments();
+      if (result?.segment?.id) {
+        setSelectedSegmentId(result.segment.id);
+      }
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : error instanceof Error
+            ? error.message
+            : null;
+      setSegmentError(message || 'Impossible de sauvegarder le segment');
+    } finally {
+      setSavingSegment(false);
+    }
+  };
+
+  const applySegment = () => {
+    if (!selectedSegmentId) return;
+    const selected = segments.find((segment) => segment.id === selectedSegmentId);
+    if (!selected) return;
+
+    const criteriaObj = (selected.criteria || {}) as {
+      logic?: SegmentLogic;
+      rules?: SegmentCriterion[];
+    };
+
+    setSegmentLogic(criteriaObj.logic === 'OR' ? 'OR' : 'AND');
+    setSegmentCriteria(
+      Array.isArray(criteriaObj.rules) && criteriaObj.rules.length > 0
+        ? criteriaObj.rules
+        : [{ field: 'tag', operator: 'equals', value: '' }],
+    );
+    setSegmentName(selected.name || 'Segment');
+    setShowFilters(true);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    });
+  };
+
+  const getInitials = (firstName?: string | null, lastName?: string | null) => {
+    if (!firstName && !lastName) return '?';
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
+  };
+
+  // Loading state
+  if (isLoading && contacts.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <span className="ml-3 text-on-surface-variant">Chargement des contacts...</span>
+      </div>
+    );
+  }
+
+  // Empty state
+  if (contacts.length === 0 && !isLoading) {
+    return (
+      <div className="text-center py-12">
+        <User className="w-12 h-12 text-on-surface-variant mx-auto mb-4 opacity-50" />
+        <p className="text-on-surface font-medium">Aucun contact trouvé</p>
+        <p className="text-sm text-on-surface-variant mt-1 mb-4">
+          Importez votre premier fichier CSV ou ajoutez un contact manuellement
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={onImportClick}
+            className="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Importer CSV / XLS
+          </button>
+          <button className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Ajouter un contact
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header Actions - Conforme maquette */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onImportClick}
+            className="px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            Importer CSV / XLS
+          </button>
+          <button className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Ajouter un contact
+          </button>
+          {selectedContactIds.size > 0 && (
+            <button
+              onClick={deleteSelectedContacts}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-error text-white font-medium rounded-lg hover:bg-error/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <X className="w-4 h-4" />
+              Supprimer {selectedContactIds.size} contact{selectedContactIds.size > 1 ? 's' : ''}
+            </button>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+          <input
+            type="text"
+            placeholder="Rechercher un contact..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 rounded-lg border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+          />
+        </div>
+      </div>
+
+      {/* Filters Bar - Conforme maquette contacts.html */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+            showFilters || activeFilters.length > 0
+              ? 'border-primary bg-primary/10 text-primary'
+              : 'border-outline-variant bg-surface text-on-surface-variant hover:bg-surface-container'
+          }`}
+        >
+          <Filter className="w-4 h-4" />
+          Filtres
+          {activeFilters.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 text-xs bg-primary text-white rounded-full">
+              {activeFilters.length}
+            </span>
+          )}
+        </button>
+
+        {/* Active Filters Tags - Comme dans la maquette */}
+        {activeFilters.map((filter) => (
+          <span
+            key={filter.key}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-primary/10 text-primary border border-primary/20"
+          >
+            {filter.label}
+            <button
+              onClick={() => removeFilter(filter.key)}
+              className="hover:bg-primary/20 rounded-full p-0.5"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </span>
+        ))}
+
+        {activeFilters.length > 0 && (
+          <button
+            onClick={clearAllFilters}
+            className="text-sm text-on-surface-variant hover:text-on-surface underline"
+          >
+            Effacer tout
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+        {segments.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <select
+              data-testid="saved-segments-select"
+              value={selectedSegmentId}
+              onChange={(e) => setSelectedSegmentId(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-outline-variant bg-surface text-sm"
+            >
+              <option value="">Segments sauvegardés</option>
+              {segments.map((segment) => (
+                <option key={segment.id} value={segment.id}>
+                  {(segment.name || 'Sans nom') + ` (${segment.contactCount})`}
+                </option>
+              ))}
+            </select>
+            <button
+              data-testid="apply-saved-segment-button"
+              onClick={applySegment}
+              disabled={!selectedSegmentId}
+              className="px-3 py-2 rounded-lg border border-outline-variant text-sm disabled:opacity-50"
+            >
+              Appliquer
+            </button>
+          </div>
+        ) : null}
+
+        <button
+          data-testid="new-segment-button"
+          onClick={() => setShowFilters(true)}
+          className="px-4 py-2 text-primary font-medium rounded-lg hover:bg-primary/5 transition-colors text-sm"
+        >
+          + Nouveau segment
+        </button>
+      </div>
+
+      {/* Filters Panel - Expandable comme maquette */}
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="p-4 rounded-xl border border-outline-variant bg-surface space-y-4 overflow-hidden"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-medium text-on-surface">Créer un segment dynamique</p>
+              <button
+                data-testid="segment-save-button"
+                className="text-sm text-primary font-medium hover:text-primary/80 disabled:opacity-50"
+                onClick={() => void saveSegment()}
+                disabled={savingSegment}
+              >
+                {savingSegment ? 'Sauvegarde…' : 'Sauvegarder'}
+              </button>
+            </div>
+
+            <input
+              data-testid="segment-name-input"
+              type="text"
+              value={segmentName}
+              onChange={(e) => setSegmentName(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-outline-variant bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+              placeholder="Nom du segment"
+            />
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <select
+                  data-testid="segment-logic-select"
+                  value={segmentLogic}
+                  onChange={(e) => setSegmentLogic(e.target.value as SegmentLogic)}
+                  className="px-3 py-2 rounded-lg border border-outline-variant bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+                >
+                  <option value="AND">ET</option>
+                  <option value="OR">OU</option>
+                </select>
+                <button
+                  data-testid="segment-add-criterion-button"
+                  className="text-sm text-primary hover:text-primary/80 font-medium flex items-center gap-1"
+                  onClick={addCriterion}
+                >
+                  <Plus className="w-3 h-3" />
+                  Ajouter un critère
+                </button>
+              </div>
+
+              {segmentCriteria.map((criterion, index) => (
+                <div key={`${criterion.field}-${index}`} className="flex items-center gap-3 flex-wrap">
+                  <select
+                    value={criterion.field}
+                    onChange={(e) => updateCriterion(index, 'field', e.target.value as SegmentCriterion['field'])}
+                    className="px-3 py-2 rounded-lg border border-outline-variant bg-background text-sm min-w-[150px]"
+                  >
+                    <option value="tag">Tag</option>
+                    <option value="status">Statut</option>
+                    <option value="email">Email</option>
+                    <option value="phone">Téléphone</option>
+                    <option value="firstName">Prénom</option>
+                    <option value="lastName">Nom</option>
+                  </select>
+
+                  <select
+                    value={criterion.operator}
+                    onChange={(e) =>
+                      updateCriterion(index, 'operator', e.target.value as SegmentCriterion['operator'])
+                    }
+                    className="px-3 py-2 rounded-lg border border-outline-variant bg-background text-sm min-w-[130px]"
+                  >
+                    <option value="equals">Égal à</option>
+                    <option value="contains">Contient</option>
+                  </select>
+
+                  <input
+                    value={criterion.value}
+                    onChange={(e) => updateCriterion(index, 'value', e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-outline-variant bg-background text-sm min-w-[200px]"
+                    placeholder="Valeur"
+                  />
+
+                  <button
+                    className="text-xs text-on-surface-variant hover:text-on-surface"
+                    onClick={() => removeCriterion(index)}
+                  >
+                    Supprimer
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {/* Result count avec loading state (RG-52) */}
+            <div className="pt-3 border-t border-outline-variant">
+              <div className="flex items-center gap-2">
+                {isPreviewLoading && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
+                <p className="text-sm text-on-surface-variant">
+                  <span className="font-semibold text-on-surface">{previewCount}</span> contacts correspondent
+                </p>
+              </div>
+              {segmentError ? (
+                <p className="text-sm text-error mt-2">{segmentError}</p>
+              ) : null}
+              {segments.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  <p className="text-xs text-on-surface-variant">Contacts par segment</p>
+                  <div className="space-y-3">
+                    {segments.map((segment) => (
+                      <details key={segment.id} className="group rounded-lg border border-outline-variant/40 bg-background/50">
+                        <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-on-surface">
+                          <div className="flex flex-col">
+                            <span>{segment.name || 'Sans nom'}</span>
+                            <span className="text-xs font-normal text-on-surface-variant">
+                              {formatSegmentFormula(segment.criteria)}
+                            </span>
+                          </div>
+                          <span className="text-xs text-on-surface-variant">
+                            {segment.contactCount} contact{segment.contactCount > 1 ? 's' : ''}
+                          </span>
+                        </summary>
+                        <div className="border-t border-outline-variant/40 px-4 py-3">
+                          {segment.contacts.length > 0 ? (
+                            <div className="space-y-2">
+                              {segment.contacts.map((contact) => (
+                                <div
+                                  key={contact.id}
+                                  className="grid grid-cols-1 gap-1 text-xs text-on-surface-variant md:grid-cols-3"
+                                >
+                                  <span className="text-on-surface">
+                                    {(contact.firstName || '-') + ' ' + (contact.lastName || '-')}
+                                  </span>
+                                  <span>{contact.email || '-'}</span>
+                                  <span>{contact.phone || '-'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-on-surface-variant">Aucun contact dans ce segment.</p>
+                          )}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Table - Conforme maquette contacts.html */}
+      <div className="overflow-x-auto rounded-xl border border-outline-variant">
+        <table className="w-full text-sm">
+          <thead className="bg-surface">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">
+                <input
+                  type="checkbox"
+                  checked={selectedContactIds.size === contacts.length && contacts.length > 0}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-outline-variant"
+                />
+              </th>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">Nom</th>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">Email</th>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">Téléphone</th>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">Tags</th>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">Ajouté le</th>
+              <th className="px-4 py-3 text-left font-semibold text-on-surface">Statut</th>
+              <th className="px-4 py-3 text-right font-semibold text-on-surface"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-outline-variant/50">
+            {contacts.map((contact, index) => (
+              <motion.tr
+                key={contact.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03 }}
+                className="hover:bg-surface/50 transition-colors"
+              >
+                {/* Checkbox */}
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedContactIds.has(contact.id)}
+                    onChange={() => toggleSelectContact(contact.id)}
+                    className="w-4 h-4 rounded border-outline-variant"
+                  />
+                </td>
+
+                {/* Nom avec avatar initials - Comme maquette */}
+                <td
+                  className="px-4 py-3 cursor-pointer"
+                  onClick={() => onContactClick?.(contact)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-xs">
+                      {getInitials(contact.firstName, contact.lastName)}
+                    </div>
+                    <div>
+                      <p className="font-medium text-on-surface">
+                        {contact.firstName} {contact.lastName}
+                      </p>
+                      {contact.location && (
+                        <p className="text-xs text-on-surface-variant">{contact.location}</p>
+                      )}
+                    </div>
+                  </div>
+                </td>
+
+                {/* Email */}
+                <td
+                  className="px-4 py-3 cursor-pointer"
+                  onClick={() => onContactClick?.(contact)}
+                >
+                  <div className="flex items-center gap-2 text-on-surface-variant">
+                    <Mail className="w-3.5 h-3.5" />
+                    <span className="truncate max-w-[200px]">{contact.email}</span>
+                  </div>
+                </td>
+
+                {/* Téléphone */}
+                <td
+                  className="px-4 py-3 cursor-pointer"
+                  onClick={() => onContactClick?.(contact)}
+                >
+                  <div className="flex items-center gap-2 text-on-surface-variant">
+                    <Phone className="w-3.5 h-3.5" />
+                    <span>{contact.phone}</span>
+                  </div>
+                </td>
+
+                {/* Tags */}
+                <td
+                  className="px-4 py-3 cursor-pointer"
+                  onClick={() => onContactClick?.(contact)}
+                >
+                  <div className="flex flex-wrap gap-1">
+                    {(contact.tags || []).slice(0, 2).map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary font-medium"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {(contact.tags || []).length > 2 && (
+                      <span className="text-xs text-on-surface-variant">
+                        +{(contact.tags || []).length - 2}
+                      </span>
+                    )}
+                  </div>
+                </td>
+
+                {/* Date d'ajout */}
+                <td
+                  className="px-4 py-3 text-on-surface-variant cursor-pointer"
+                  onClick={() => onContactClick?.(contact)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {formatDate(contact.createdAt)}
+                  </div>
+                </td>
+
+                {/* Statut - Comme maquette */}
+                <td
+                  className="px-4 py-3 cursor-pointer"
+                  onClick={() => onContactClick?.(contact)}
+                >
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                    contact.optOut 
+                      ? 'text-error bg-error/10' 
+                      : 'text-success bg-success/10'
+                  }`}>
+                    {contact.optOut ? <XCircle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
+                    {contact.optOut ? 'Inactif' : 'Actif'}
+                  </span>
+                </td>
+
+                {/* Actions menu */}
+                <td className="px-4 py-3 text-right relative" onClick={(e) => e.stopPropagation()}>
+                  <div className="relative">
+                    <button
+                      onClick={() => setOpenMenuId(openMenuId === contact.id ? null : contact.id)}
+                      className="p-1.5 rounded-lg hover:bg-surface-container transition-colors text-on-surface-variant"
+                      disabled={isDeleting}
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    
+                    {openMenuId === contact.id && (
+                      <div className="absolute right-0 mt-1 w-40 bg-surface border border-outline-variant rounded-lg shadow-lg z-10">
+                        <button
+                          onClick={() => deleteContact(contact.id)}
+                          disabled={isDeleting}
+                          className="w-full text-left px-4 py-2 text-sm text-error hover:bg-error/10 rounded-t-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Supprimer ce contact
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </motion.tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination - Conforme maquette */}
+      <div className="flex items-center justify-between px-2 py-3">
+        <p className="text-sm text-on-surface-variant">
+          Affichage <span className="font-medium text-on-surface">1–{contacts.length}</span> sur{' '}
+          <span className="font-medium text-on-surface">{total.toLocaleString('fr-FR')}</span>
+        </p>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrevPage}
+            disabled={!cursor || isLoading}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-outline-variant text-sm font-medium text-on-surface-variant hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Préc.
+          </button>
+          
+          <button
+            onClick={handleNextPage}
+            disabled={!hasMore || isLoading}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-outline-variant text-sm font-medium text-on-surface-variant hover:bg-surface-container disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Suiv.
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Loading more indicator */}
+      {isLoading && contacts.length > 0 && (
+        <div className="flex items-center justify-center py-4">
+          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+          <span className="ml-2 text-sm text-on-surface-variant">Chargement...</span>
+        </div>
+      )}
+    </div>
+  );
+}

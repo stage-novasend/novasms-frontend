@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useAppMetrics } from '@/hooks/useAppMetrics';
 
 function DashboardIcon() {
   return (
@@ -183,6 +184,7 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
+  const { contactsTotal, credits, loading, refresh } = useAppMetrics();
 
   const handleLogout = () => {
     logout();
@@ -206,6 +208,28 @@ export default function Sidebar() {
         </button>
       </div>
       <div className="sb-nav">
+        {!collapsed && (
+          <div className="sidebar-credits">
+            <div className="credits-pill-top">
+              <span className="credits-label">Crédits disponibles</span>
+              <button className="credits-recharge" onClick={() => void refresh()}>
+                Recharger ↗
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="credits-amount">
+                {credits == null ? '--' : credits.toLocaleString('fr-FR')}
+              </span>
+              <div style={{ flex: 1 }}>
+                <div className="credits-bar">
+                  <div className="credits-bar-fill" />
+                </div>
+                <div className="credits-hint">{loading ? 'Chargement…' : 'Mise à jour ok'}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {!collapsed && <div className="sb-section-label">Principal</div>}
         <Item
           to="/dashboard"
@@ -217,7 +241,7 @@ export default function Sidebar() {
           to="/contacts"
           icon={<ContactsIcon />}
           label="Contacts"
-          badge="12k"
+          badge={contactsTotal > 0 ? contactsTotal.toLocaleString('fr-FR') : undefined}
           collapsed={collapsed}
         />
         <Item to="/campaigns" icon={<CampaignsIcon />} label="Campagnes" collapsed={collapsed} />
@@ -225,7 +249,6 @@ export default function Sidebar() {
           to="/automations"
           icon={<AutomationsIcon />}
           label="Automatisations"
-          badge="3"
           collapsed={collapsed}
         />
         <Item to="/analytics" icon={<AnalyticsIcon />} label="Analytics" collapsed={collapsed} />

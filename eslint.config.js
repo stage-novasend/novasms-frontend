@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist', 'prisma.config.ts']),
+  globalIgnores(['dist', 'prisma.config.ts', 'e2e/**', 'playwright.config.ts', 'test-results/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

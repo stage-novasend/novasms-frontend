@@ -26,12 +26,14 @@ const channelOptions = ['Email', 'SMS', 'WhatsApp', 'Push'];
 
 export default function Wizard() {
   const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
+  const saveWizardProfile = useAuthStore((state) => state.saveWizardProfile);
   const markOnboardingCompleted = useAuthStore((state) => state.markOnboardingCompleted);
   const [currentStep, setCurrentStep] = useState(1);
   const [data, setData] = useState<WizardData>({
-    fullName: '',
-    email: '',
-    companyName: '',
+    fullName: user?.name ?? '',
+    email: user?.email ?? '',
+    companyName: user?.name ?? '',
     role: 'Responsable Marketing',
     sector: 'E-commerce',
     contactsSource: 'CSV',
@@ -40,14 +42,29 @@ export default function Wizard() {
     campaignGoal: 'Promotion flash',
   });
 
+  const completeWizard = async () => {
+    const companyName = data.companyName.trim() || data.fullName.trim() || user?.name?.trim() || '';
+
+    const saved = await saveWizardProfile({
+      companyName,
+      role: data.role,
+      sector: data.sector,
+      primaryChannels: data.primaryChannels,
+    });
+
+    if (!saved) return;
+
+    await markOnboardingCompleted();
+    navigate('/dashboard');
+  };
+
   const goNext = () => {
     if (currentStep < 4) {
       setCurrentStep((step) => step + 1);
       return;
     }
 
-    markOnboardingCompleted();
-    navigate('/dashboard');
+    void completeWizard();
   };
 
   const goBack = () => {
@@ -57,7 +74,7 @@ export default function Wizard() {
   };
 
   const handleSkip = () => {
-    markOnboardingCompleted();
+    void markOnboardingCompleted();
     navigate('/dashboard');
   };
 

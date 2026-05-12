@@ -6,6 +6,9 @@ export type User = {
   email: string;
   name: string;
   onboardingCompleted?: boolean; // ✅ Champ ajouté
+  role?: string;
+  sector?: string | null;
+  primaryChannels?: string[];
 };
 
 export type AuthState = {
@@ -27,6 +30,12 @@ export type AuthState = {
   setTokens: (access: string, refresh: string, user: User) => void;
   clearError: () => void;
   markOnboardingCompleted: () => Promise<void>;
+  saveWizardProfile: (profile: {
+    companyName: string;
+    role: string;
+    sector: string;
+    primaryChannels: string[];
+  }) => Promise<boolean>;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -198,6 +207,46 @@ export const useAuthStore = create<AuthState>()(
           user: state.user ? { ...state.user, onboardingCompleted: true } : null,
           isFirstLogin: false,
         }));
+      },
+
+      saveWizardProfile: async ({ companyName, role, sector, primaryChannels }) => {
+        const { accessToken, user } = get();
+        if (!user?.id || !accessToken) return false;
+
+        try {
+          const res = await fetch('http://localhost:3000/api/auth/profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ companyName, role, sector, primaryChannels }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            set({ error: data.message || 'Impossible de sauvegarder le profil' });
+            return false;
+          }
+
+          set((state) => ({
+            user: state.user
+              ? {
+                  ...state.user,
+                  name: data.account?.companyName ?? companyName,
+                  role: data.account?.role ?? role,
+                  sector: data.account?.sector ?? sector,
+                  primaryChannels: data.account?.primaryChannels ?? primaryChannels,
+                }
+              : null,
+          }));
+
+          return true;
+        } catch {
+          set({ error: 'Erreur de connexion au serveur' });
+          return false;
+        }
       },
     }),
     {

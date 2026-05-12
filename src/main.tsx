@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
@@ -25,6 +26,8 @@ import AppLayout from './components/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Wizard from './pages/Wizard.tsx';
 import Security from './features/account/pages/Security';
+import Contacts from './pages/Contacts';
+const ContactDetailLazy = React.lazy(() => import('./features/contacts/pages/ContactDetail'));
 
 import './index.css';
 
@@ -59,7 +62,17 @@ ReactDOM.createRoot(rootElement).render(
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/contacts" element={<Contacts />} />
+          <Route
+            path="/contacts/:id"
+            element={
+              <React.Suspense fallback={<div className="p-6">Chargement…</div>}>
+                <ContactDetailLazy />
+              </React.Suspense>
+            }
+          />
           <Route path="/account/security" element={<Security />} />
+          <Route path="/onboarding" element={<Wizard />} />
           <Route path="/wizard" element={<Wizard />} />
         </Route>
       </Routes>

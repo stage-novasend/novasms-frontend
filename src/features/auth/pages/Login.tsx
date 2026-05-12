@@ -29,7 +29,7 @@ export default function Login() {
     const { isFirstLogin } = useAuthStore.getState();
 
     if (isFirstLogin) {
-      navigate('/wizard');
+      navigate('/onboarding');
       return;
     }
 
