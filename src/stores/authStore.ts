@@ -36,6 +36,7 @@ export type AuthState = {
     sector: string;
     primaryChannels: string[];
   }) => Promise<boolean>;
+  isHydrated: boolean;
 };
 
 export const useAuthStore = create<AuthState>()(
@@ -51,6 +52,7 @@ export const useAuthStore = create<AuthState>()(
       requiresTwoFactor: false,
       twoFactorToken: null,
       twoFactorMessage: null,
+      isHydrated: false,
 
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
@@ -259,6 +261,9 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
         isFirstLogin: state.isFirstLogin,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) state.isHydrated = true;
+      },
     },
   ),
 );
