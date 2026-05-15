@@ -54,6 +54,7 @@ ReactDOM.createRoot(rootElement).render(
         <Route path="/verify-email/:token" element={<VerifyEmail />} />
         <Route path="/confirmation-success" element={<ConfirmationSuccess />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
 
         {/* Protected Routes with AppLayout */}
         <Route

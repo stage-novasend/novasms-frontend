@@ -19,12 +19,15 @@ export type AuthState = {
   isLoading: boolean;
   error: string | null;
   isFirstLogin: boolean; // Calculé depuis le backend
+  rememberMe: boolean;
+  sessionExpiresAt: number | null;
   requiresTwoFactor: boolean;
   twoFactorToken: string | null;
   twoFactorMessage: string | null;
+  pendingRememberMe: boolean;
 
   // Actions
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   verifyTwoFactor: (twoFactorToken: string, code: string) => Promise<boolean>;
   logout: () => void;
   setTokens: (access: string, refresh: string, user: User) => void;
@@ -49,12 +52,15 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
       isFirstLogin: false,
+      rememberMe: false,
+      sessionExpiresAt: null,
       requiresTwoFactor: false,
       twoFactorToken: null,
       twoFactorMessage: null,
+      pendingRememberMe: false,
       isHydrated: false,
 
-      login: async (email: string, password: string) => {
+      login: async (email: string, password: string, rememberMe = false) => {
         set({ isLoading: true, error: null });
         try {
           const res = await fetch('http://localhost:3000/api/auth/login', {
@@ -83,12 +89,15 @@ export const useAuthStore = create<AuthState>()(
               requiresTwoFactor: true,
               twoFactorToken: data.twoFactorToken ?? null,
               twoFactorMessage: data.message ?? 'Un code de vérification a été envoyé.',
+              pendingRememberMe: rememberMe,
             });
             return false;
           }
 
           // ✅ Calculer isFirstLogin depuis le backend
           const onboardingCompleted = data.account?.onboardingCompleted ?? false;
+          const sessionExpiresAt =
+            Date.now() + (rememberMe ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000);
 
           set({
             accessToken: data.accessToken,
@@ -97,9 +106,12 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             isFirstLogin: !onboardingCompleted, // ✅ Vrai si onboarding NON complété
+            rememberMe,
+            sessionExpiresAt,
             requiresTwoFactor: false,
             twoFactorToken: null,
             twoFactorMessage: null,
+            pendingRememberMe: false,
           });
           return true;
         } catch {
@@ -109,6 +121,7 @@ export const useAuthStore = create<AuthState>()(
             requiresTwoFactor: false,
             twoFactorToken: null,
             twoFactorMessage: null,
+            pendingRememberMe: false,
           });
           return false;
         }
@@ -134,6 +147,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           const onboardingCompleted = data.account?.onboardingCompleted ?? false;
+          const rememberMe = get().pendingRememberMe;
+          const sessionExpiresAt =
+            Date.now() + (rememberMe ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000);
 
           set({
             accessToken: data.accessToken,
@@ -146,12 +162,16 @@ export const useAuthStore = create<AuthState>()(
             twoFactorToken: null,
             twoFactorMessage: null,
             isFirstLogin: !onboardingCompleted,
+            rememberMe,
+            sessionExpiresAt,
+            pendingRememberMe: false,
           });
           return true;
         } catch {
           set({
             error: 'Erreur de connexion au serveur',
             isLoading: false,
+            pendingRememberMe: false,
           });
           return false;
         }
@@ -165,9 +185,12 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           error: null,
           isFirstLogin: false,
+          rememberMe: false,
+          sessionExpiresAt: null,
           requiresTwoFactor: false,
           twoFactorToken: null,
           twoFactorMessage: null,
+          pendingRememberMe: false,
         });
       },
 
@@ -182,6 +205,9 @@ export const useAuthStore = create<AuthState>()(
           twoFactorToken: null,
           twoFactorMessage: null,
           isFirstLogin: !onboardingCompleted,
+          rememberMe: true,
+          sessionExpiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+          pendingRememberMe: false,
         });
       },
 
@@ -260,9 +286,32 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
         isFirstLogin: state.isFirstLogin,
+        rememberMe: state.rememberMe,
+        sessionExpiresAt: state.sessionExpiresAt,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) state.isHydrated = true;
+        if (!state) return;
+
+        const hasValidSession =
+          typeof state.sessionExpiresAt === 'number' &&
+          Number.isFinite(state.sessionExpiresAt) &&
+          Date.now() < state.sessionExpiresAt;
+
+        if (!hasValidSession) {
+          state.user = null;
+          state.accessToken = null;
+          state.refreshToken = null;
+          state.isAuthenticated = false;
+          state.isFirstLogin = false;
+          state.rememberMe = false;
+          state.sessionExpiresAt = null;
+          state.requiresTwoFactor = false;
+          state.twoFactorToken = null;
+          state.twoFactorMessage = null;
+          state.pendingRememberMe = false;
+        }
+
+        state.isHydrated = true;
       },
     },
   ),

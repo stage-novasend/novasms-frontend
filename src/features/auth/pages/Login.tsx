@@ -8,6 +8,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const navigate = useNavigate();
   const {
@@ -49,7 +50,7 @@ export default function Login() {
       return;
     }
 
-    const success = await login(email, password);
+    const success = await login(email, password, rememberMe);
 
     if (success) {
       redirectAfterAuth();
@@ -155,6 +156,8 @@ export default function Login() {
               <label className="flex items-center gap-2 text-on-surface-variant">
                 <input
                   type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 accent-primary rounded border-outline-variant"
                 />
                 Se souvenir de moi
