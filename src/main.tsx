@@ -2,6 +2,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Toaster } from 'sonner';
 
 // Pages Marketing
 import LandingPage from './pages/LandingPage';
@@ -26,9 +27,13 @@ import AppLayout from './components/AppLayout';
 import Dashboard from './pages/Dashboard';
 import Wizard from './pages/Wizard.tsx';
 import Security from './features/account/pages/Security';
+import Team from './features/account/pages/Team';
+import Settings from './features/account/pages/Settings';
 import Contacts from './pages/Contacts';
 import Campaigns from './pages/Campaigns';
 import CampaignEditor from './pages/CampaignEditor';
+import Automations from './pages/Automations';
+import Analytics from './pages/Analytics';
 const ContactDetailLazy = React.lazy(() => import('./features/contacts/pages/ContactDetail'));
 
 import './index.css';
@@ -69,6 +74,9 @@ ReactDOM.createRoot(rootElement).render(
           <Route path="/campaigns" element={<Campaigns />} />
           <Route path="/campaigns/new" element={<CampaignEditor />} />
           <Route path="/campaigns/:id" element={<CampaignEditor />} />
+          <Route path="/campaigns/:id/edit" element={<CampaignEditor />} />
+          <Route path="/automations" element={<Automations />} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route
             path="/contacts/:id"
             element={
@@ -78,10 +86,13 @@ ReactDOM.createRoot(rootElement).render(
             }
           />
           <Route path="/account/security" element={<Security />} />
+          <Route path="/account/team" element={<Team />} />
+          <Route path="/account/settings" element={<Settings />} />
           <Route path="/onboarding" element={<Wizard />} />
           <Route path="/wizard" element={<Wizard />} />
         </Route>
       </Routes>
+      <Toaster position="top-right" richColors />
     </BrowserRouter>
   </React.StrictMode>,
 );

@@ -4,9 +4,10 @@ import { useAppMetrics } from '@/hooks/useAppMetrics';
 import { contactsApi } from '@/api/contacts';
 import type { SegmentWithContacts } from '@/features/contacts/types/contact';
 import { BarChart3, Zap, TrendingUp, Users } from 'lucide-react';
+import WelcomeChecklist from '@/components/WelcomeChecklist';
 
 export default function Dashboard() {
-  const { user } = useAuthStore();
+  const { user, isFirstLogin } = useAuthStore();
   const { contactsTotal, credits } = useAppMetrics();
   const [segments, setSegments] = useState<SegmentWithContacts[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
@@ -72,6 +73,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Welcome Checklist - Visible only during onboarding */}
+      {isFirstLogin && <WelcomeChecklist />}
+
       {/* KPI Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div className="bg-surface rounded-xl shadow-sm p-6 border border-outline-variant/30">
