@@ -27,35 +27,41 @@ class ImageUploadService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await fetch(
-      `/api/campaigns/${campaignId}/images/upload`,
-      {
-        method: 'POST',
-        body: formData,
-        credentials: 'include', // For JWT cookies
-      },
-    );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(
-        error.message ||
-          'Erreur lors de l\'upload de l\'image',
+    try {
+      const response = await fetch(
+        `/api/campaigns/${campaignId}/images/upload`,
+        {
+          method: 'POST',
+          body: formData,
+          credentials: 'include', // For JWT cookies
+        },
       );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Upload error:', response.status, errorText);
+        throw new Error(
+          `Upload failed (${response.status}): ${errorText}`,
+        );
+      }
+
+      const data = await response.json();
+      console.log('✅ Image uploaded:', data);
+      const uploadedImage: UploadedImage = {
+        id: data.id,
+        url: data.url,
+        name: data.fileName,
+        size: data.size,
+        type: data.type,
+        uploadedAt: new Date(data.uploadedAt),
+      };
+
+      this.uploadedImages.set(data.id, uploadedImage);
+      return uploadedImage;
+    } catch (error) {
+      console.error('❌ Image upload exception:', error);
+      throw error;
     }
-
-    const data = await response.json();
-    const uploadedImage: UploadedImage = {
-      id: data.id,
-      url: data.url,
-      name: data.fileName,
-      size: data.size,
-      type: data.type,
-      uploadedAt: new Date(data.uploadedAt),
-    };
-
-    this.uploadedImages.set(data.id, uploadedImage);
-    return uploadedImage;
   }
 
   /**

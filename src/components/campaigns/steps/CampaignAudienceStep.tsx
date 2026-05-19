@@ -31,9 +31,10 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
     const loadSegments = async () => {
       try {
         const data = await contactsApi.listSegments();
+        console.log('✅ Segments loaded:', data);
         setSegments(Array.isArray(data) ? (data as DynamicSegment[]) : []);
       } catch (error) {
-        console.error('Error loading segments:', error);
+        console.error('❌ Error loading segments:', error);
         setSegments([]);
       } finally {
         setLoading(false);

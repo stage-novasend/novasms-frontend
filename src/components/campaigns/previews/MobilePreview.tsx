@@ -90,6 +90,30 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
                         {block.type === 'divider' && (
                           <div className="h-px bg-outline-variant my-1" />
                         )}
+                        {block.type === 'social' && (
+                          <div className="flex gap-2 justify-center py-2">
+                            {['facebook', 'instagram', 'tiktok', 'linkedin'].map((network) => {
+                              const icons: Record<string, string> = {
+                                facebook: 'f',
+                                instagram: '📷',
+                                tiktok: '♪',
+                                linkedin: '🔗',
+                              };
+                              const url = ((block.content as Record<string, unknown>)?.[network] as string) || '#';
+                              return (
+                                <a
+                                  key={network}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold hover:bg-primary/30"
+                                >
+                                  {icons[network]}
+                                </a>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
