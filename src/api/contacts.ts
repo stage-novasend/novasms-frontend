@@ -120,10 +120,18 @@ export const contactsApi = {
   },
 
   exportById: async (id: string, format: 'json' | 'csv' = 'json') => {
-    const response = await api.get(`/contacts/${id}/export?format=${format}`, {
-      responseType: 'blob',
-    });
-    return response.data as Blob;
+    try {
+      const response = await api.get<{ success: boolean; format: string; data: string; fileName: string }>(
+        `/contacts/${id}/export?format=${format}`,
+      );
+      // Convertir le contenu en blob avec le bon type MIME
+      const mimeType = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
+      const blob = new Blob([response.data.data], { type: mimeType });
+      return blob;
+    } catch (error) {
+      console.error('❌ Export error:', error);
+      throw error;
+    }
   },
 
   previewSegment: async (logic: SegmentLogic, criteria: SegmentCriterion[]) => {

@@ -117,9 +117,12 @@ export default function ContactDetail() {
     setActionError(null);
     setActionLoading('optout');
     try {
+      console.log('📤 Désabonnement du contact:', id);
       await contactsApi.optOut(id);
+      console.log('✅ Contact désabonné avec succès');
       await refresh();
     } catch (err: unknown) {
+      console.error('❌ Erreur désabonnement:', err);
       const message =
         typeof err === 'object' && err !== null && 'response' in err
           ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
@@ -140,9 +143,12 @@ export default function ContactDetail() {
     setActionError(null);
     setActionLoading('delete');
     try {
+      console.log('🗑️  Suppression du contact:', id);
       await contactsApi.delete(id);
+      console.log('✅ Contact supprimé avec succès');
       navigate('/contacts');
     } catch (err: unknown) {
+      console.error('❌ Erreur suppression:', err);
       const message =
         typeof err === 'object' && err !== null && 'response' in err
           ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
@@ -159,7 +165,10 @@ export default function ContactDetail() {
     setActionError(null);
     setActionLoading('export');
     try {
+      console.log('📥 Export du contact:', id);
       const blob = await contactsApi.exportById(id, 'csv');
+      console.log('✅ Blob créé, taille:', blob.size);
+      
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -168,7 +177,9 @@ export default function ContactDetail() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      console.log('✅ Fichier téléchargé');
     } catch (err: unknown) {
+      console.error('❌ Erreur export:', err);
       const message =
         typeof err === 'object' && err !== null && 'response' in err
           ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
