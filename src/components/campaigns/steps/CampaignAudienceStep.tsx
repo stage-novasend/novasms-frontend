@@ -16,10 +16,7 @@ interface CampaignAudienceStepProps {
  * Calculate estimated cost based on recipient count
  */
 
-export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
-  onNext,
-  onPrev,
-}) => {
+export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, onPrev }) => {
   const { draft, setDraftSegment, updateEstimates } = useCampaignStore();
   const [segments, setSegments] = useState<DynamicSegment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +32,7 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
         console.log('✅ Raw API response:', data);
         console.log('✅ Response type:', typeof data);
         console.log('✅ Is array?:', Array.isArray(data));
-        
+
         if (!Array.isArray(data)) {
           console.warn('⚠️ Response is not an array, got:', data);
           setSegments([]);
@@ -80,7 +77,7 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
         }
       }
 
-      setContactCounts(prev => ({ ...prev, ...counts }));
+      setContactCounts((prev) => ({ ...prev, ...counts }));
       setLoadingCounts(new Set());
     };
 
@@ -88,7 +85,7 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
   }, [segments, contactCounts]);
 
   const selectedSegment = segments.find((s) => s.id === draft.segmentId);
-  const selectedContactCount = selectedSegment 
+  const selectedContactCount = selectedSegment
     ? (contactCounts[selectedSegment.id] ?? selectedSegment.contactCount ?? 0)
     : 0;
 
@@ -147,9 +144,7 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
             <span className="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-sm text-on-primary shadow-lg shadow-primary/20">
               3
             </span>
-            <span className="text-xs font-bold uppercase hidden sm:inline">
-              Audience
-            </span>
+            <span className="text-xs font-bold uppercase hidden sm:inline">Audience</span>
           </div>
           <div className="w-20 h-[2px] bg-outline-variant/30" />
           <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
@@ -169,8 +164,8 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
           Sélectionnez votre audience
         </h2>
         <p className="text-on-surface-variant max-w-2xl mx-auto">
-          Choisissez un segment de contacts pour cibler votre campagne.
-          Le nombre de destinataires est calculé en temps réel depuis votre base de données.
+          Choisissez un segment de contacts pour cibler votre campagne. Le nombre de destinataires
+          est calculé en temps réel depuis votre base de données.
         </p>
       </div>
 
@@ -209,7 +204,7 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
                   🔧 Diagnostic technique
                 </summary>
                 <pre className="mt-4 text-xs overflow-auto max-h-40 bg-surface-container p-2 rounded font-mono text-on-surface-variant">
-{`
+                  {`
 Ouvrez la console (F12) et cherchez:
 1. "📡 Fetching segments from API..." 
 2. "✅ Raw API response:" → vérifiez le contenu
@@ -227,24 +222,41 @@ puis revenez ici avec "Rafraîchir".
               </details>
             </div>
           </div>
-          
+
           <div className="bg-surface-container-lowest rounded-2xl p-8 border border-outline-variant/30">
-            <h4 className="font-headline font-bold text-on-surface mb-4">Comment créer un segment ?</h4>
+            <h4 className="font-headline font-bold text-on-surface mb-4">
+              Comment créer un segment ?
+            </h4>
             <ol className="space-y-3 text-on-surface-variant">
               <li className="flex gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">1</span>
-                <span>Allez dans <strong>Contacts</strong> et sélectionnez <strong>Segments</strong></span>
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                  1
+                </span>
+                <span>
+                  Allez dans <strong>Contacts</strong> et sélectionnez <strong>Segments</strong>
+                </span>
               </li>
               <li className="flex gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">2</span>
-                <span>Cliquez sur <strong>Créer un segment</strong></span>
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                  2
+                </span>
+                <span>
+                  Cliquez sur <strong>Créer un segment</strong>
+                </span>
               </li>
               <li className="flex gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">3</span>
-                <span>Définissez les critères (tags, localisation, comportement) ou sélectionnez les contacts manuellement</span>
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                  3
+                </span>
+                <span>
+                  Définissez les critères (tags, localisation, comportement) ou sélectionnez les
+                  contacts manuellement
+                </span>
               </li>
               <li className="flex gap-3">
-                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">4</span>
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
+                  4
+                </span>
                 <span>Revenez ici pour sélectionner votre segment et continuer</span>
               </li>
             </ol>
@@ -271,15 +283,13 @@ puis revenez ici avec "Rafraîchir".
                       <h3 className="font-headline font-bold text-lg text-on-surface">
                         {segment.name || 'Sans nom'}
                       </h3>
-                      {segment.criteria ? (
-                        <p className="text-on-surface-variant text-sm mt-1">
-                          {typeof segment.criteria === 'string' 
-                            ? segment.criteria 
-                            : typeof segment.criteria === 'object' 
-                              ? JSON.stringify(segment.criteria as Record<string, unknown>).substring(0, 50)
-                              : String(segment.criteria).substring(0, 50)}
-                        </p>
-                      ) : null}
+                      <p className="text-on-surface-variant text-sm mt-1">
+                        {segment.type === 'static'
+                          ? '📋 Sélection manuelle'
+                          : segment.type === 'dynamic'
+                            ? '🔍 Filtres dynamiques'
+                            : '📊 Segment'}
+                      </p>
                     </div>
                     {draft.segmentId === segment.id && (
                       <span className="material-symbols-outlined text-primary text-2xl">
