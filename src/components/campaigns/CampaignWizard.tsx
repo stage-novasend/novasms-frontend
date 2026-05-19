@@ -34,38 +34,51 @@ export const CampaignWizard: FC = () => {
   }, [draftSaved]);
 
   const handleSaveDraft = async () => {
+    console.log('💾 Saving draft:', draft);
     saveDraft();
+    console.log('✅ Draft saved successfully');
     setDraftSaved(true);
   };
 
   const handleNext = async () => {
+    console.log('⏭️  Moving to next step from step', draft.step);
     saveDraft();
     if (draft.step < 4) {
-      setDraftStep((draft.step + 1) as 1 | 2 | 3 | 4);
+      const nextStep = (draft.step + 1) as 1 | 2 | 3 | 4;
+      console.log('📍 Next step:', nextStep);
+      setDraftStep(nextStep);
     }
   };
 
   const handlePrev = () => {
+    console.log('⏮️  Moving to previous step from step', draft.step);
     if (draft.step > 1) {
-      setDraftStep((draft.step - 1) as 1 | 2 | 3 | 4);
+      const prevStep = (draft.step - 1) as 1 | 2 | 3 | 4;
+      console.log('📍 Previous step:', prevStep);
+      setDraftStep(prevStep);
     }
   };
 
   const handleSubmit = async () => {
     try {
+      console.log('🚀 Submitting campaign:', draft);
       const result = await submitCampaign();
       if (result.success) {
+        console.log('✅ Campaign created:', result.campaignId);
         // TODO: Redirect to campaign detail/success page
-        console.log('Campaign created:', result.campaignId);
+      } else {
+        console.error('❌ Campaign creation failed');
       }
     } catch (err) {
-      console.error('Submit error:', err);
+      console.error('❌ Submit error:', err);
     }
   };
 
   const handleDiscard = () => {
+    console.log('🗑️  Discarding draft');
     clearDraft();
     setConfirmDiscard(false);
+    console.log('✅ Draft cleared, redirecting to /campaigns');
     window.location.href = '/campaigns';
   };
 

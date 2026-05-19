@@ -34,6 +34,7 @@ export interface CampaignDraft {
   name?: string;
   description?: string;
   segmentId?: string;
+  segmentName?: string; // Track segment name for display
   emailContent?: EmailContent;
   smsContent?: SMSContent;
   abTest?: ABTestConfig;

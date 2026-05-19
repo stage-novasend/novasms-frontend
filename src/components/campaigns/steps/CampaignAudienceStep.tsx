@@ -30,11 +30,22 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
   useEffect(() => {
     const loadSegments = async () => {
       try {
+        console.log('📡 Fetching segments from API...');
         const data = await contactsApi.listSegments();
-        console.log('✅ Segments loaded:', data);
-        setSegments(Array.isArray(data) ? (data as DynamicSegment[]) : []);
+        console.log('✅ Raw API response:', data);
+        console.log('✅ Response type:', typeof data);
+        console.log('✅ Is array?:', Array.isArray(data));
+        
+        if (!Array.isArray(data)) {
+          console.warn('⚠️ Response is not an array, got:', data);
+          setSegments([]);
+        } else {
+          console.log('✅ Segments loaded successfully:', data.length, 'items');
+          setSegments(data as DynamicSegment[]);
+        }
       } catch (error) {
         console.error('❌ Error loading segments:', error);
+        console.error('❌ Error type:', error instanceof Error ? error.message : String(error));
         setSegments([]);
       } finally {
         setLoading(false);
@@ -183,11 +194,37 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({
                 Créer un segment
               </a>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  console.log('🔄 Reloading segments...');
+                  window.location.reload();
+                }}
                 className="px-6 py-3 bg-surface-container-high text-on-surface font-semibold rounded-xl hover:bg-surface-container-highest transition-colors"
               >
                 Rafraîchir
               </button>
+            </div>
+            <div className="mt-6 text-left">
+              <details className="p-4 bg-surface-container-lowest rounded border border-outline-variant/30">
+                <summary className="cursor-pointer font-semibold text-on-surface-variant hover:text-on-surface">
+                  🔧 Diagnostic technique
+                </summary>
+                <pre className="mt-4 text-xs overflow-auto max-h-40 bg-surface-container p-2 rounded font-mono text-on-surface-variant">
+{`
+Ouvrez la console (F12) et cherchez:
+1. "📡 Fetching segments from API..." 
+2. "✅ Raw API response:" → vérifiez le contenu
+3. "✅ Segments loaded successfully: X items"
+
+Si X = 0, cela signifie:
+- Aucun segment n'a été créé
+- OU l'API n'est pas configurée correctement
+- OU l'authentification a échoué
+
+Créez un segment depuis la page Contacts
+puis revenez ici avec "Rafraîchir".
+                `.trim()}
+                </pre>
+              </details>
             </div>
           </div>
           
