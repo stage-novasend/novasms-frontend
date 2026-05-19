@@ -299,23 +299,29 @@ export const EmailEditor: FC = () => {
                 )}
                 {block.type === 'social' && (
                   <div className="flex gap-3 justify-center py-2">
-                    {['facebook', 'instagram', 'tiktok', 'linkedin'].map((network) => {
-                      const networkNames: Record<string, string> = {
-                        facebook: 'f',
-                        instagram: '📷',
-                        tiktok: '♪',
-                        linkedin: '🔗',
-                      };
+                    {[
+                      { id: 'facebook', icon: 'f', color: '#1877F2' },
+                      { id: 'instagram', icon: '📷', color: '#E4405F' },
+                      { id: 'tiktok', icon: '♪', color: '#000000' },
+                      { id: 'linkedin', icon: '🔗', color: '#0A66C2' },
+                    ].map((network) => {
+                      const url = ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
+                      // Ne pas afficher si l'URL est vide
+                      if (!url) return null;
                       return (
                         <a
-                          key={network}
-                          href={((block.content as Record<string, unknown>)?.[network] as string) || '#'}
-                          className="w-10 h-10 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs hover:bg-primary/30"
+                          key={network.id}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
+                          style={{ backgroundColor: network.color }}
+                          title={network.id}
                         >
-                          {networkNames[network]}
+                          {network.icon}
                         </a>
                       );
-                    })}
+                    }).filter(Boolean)}
                   </div>
                 )}
               </div>
@@ -444,28 +450,91 @@ export const EmailEditor: FC = () => {
                   </div>
                 );
               } else if (block.type === 'social') {
+                const socialNetworks = [
+                  { 
+                    id: 'facebook', 
+                    name: 'Facebook', 
+                    url: 'https://facebook.com',
+                    icon: '🔵 f',
+                    color: '#1877F2'
+                  },
+                  { 
+                    id: 'instagram', 
+                    name: 'Instagram', 
+                    url: 'https://instagram.com',
+                    icon: '🎨 📷',
+                    color: '#E4405F'
+                  },
+                  { 
+                    id: 'tiktok', 
+                    name: 'TikTok', 
+                    url: 'https://tiktok.com',
+                    icon: '🎵 ♪',
+                    color: '#000000'
+                  },
+                  { 
+                    id: 'linkedin', 
+                    name: 'LinkedIn', 
+                    url: 'https://linkedin.com',
+                    icon: '🔗 in',
+                    color: '#0A66C2'
+                  },
+                ];
+                
                 return (
                   <div className="space-y-4">
-                    <p className="text-xs text-on-surface-variant font-semibold">Réseaux sociaux</p>
-                    {(['facebook', 'instagram', 'tiktok', 'linkedin'] as const).map((network) => (
-                      <div key={network}>
-                        <label className="text-sm font-semibold text-on-surface capitalize">
-                          {network === 'tiktok' ? 'TikTok' : network.charAt(0).toUpperCase() + network.slice(1)}
-                        </label>
-                        <input
-                          type="url"
-                          value={((block.content as Record<string, unknown>)?.[network] as string) || ''}
-                          onChange={(e) =>
-                            handleUpdateBlock(block.id, {
-                              ...block.content,
-                              [network]: e.target.value,
-                            })
-                          }
-                          placeholder={`https://${network}.com/votre-profil`}
-                          className="w-full mt-1 bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-lg px-3 py-2 text-sm"
-                        />
-                      </div>
-                    ))}
+                    <p className="text-xs text-on-surface-variant font-semibold uppercase tracking-widest">
+                      Réseaux sociaux
+                    </p>
+                    <p className="text-xs text-on-surface-variant">
+                      Activez les réseaux à afficher et entrez vos URLs
+                    </p>
+                    {socialNetworks.map((network) => {
+                      const isEnabled = Boolean(((block.content as Record<string, unknown>)?.[network.id] as string));
+                      const url = ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
+                      
+                      return (
+                        <div key={network.id} className="border border-outline-variant/30 rounded-lg p-3">
+                          <div className="flex items-center gap-3 mb-2">
+                            <input
+                              type="checkbox"
+                              checked={isEnabled}
+                              onChange={(e) => {
+                                handleUpdateBlock(block.id, {
+                                  ...block.content,
+                                  [network.id]: e.target.checked ? `https://${network.id}.com/votre-profil` : '',
+                                });
+                              }}
+                              className="w-5 h-5 rounded border-outline-variant cursor-pointer"
+                            />
+                            <div 
+                              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                              style={{ backgroundColor: network.color }}
+                              title={network.name}
+                            >
+                              {network.icon.split(' ')[1]}
+                            </div>
+                            <label className="text-sm font-semibold text-on-surface flex-1 cursor-pointer">
+                              {network.name}
+                            </label>
+                          </div>
+                          {isEnabled && (
+                            <input
+                              type="url"
+                              value={url}
+                              onChange={(e) =>
+                                handleUpdateBlock(block.id, {
+                                  ...block.content,
+                                  [network.id]: e.target.value,
+                                })
+                              }
+                              placeholder={`https://${network.id}.com/votre-profil`}
+                              className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-lg px-3 py-2 text-sm"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               }

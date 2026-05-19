@@ -92,26 +92,29 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
                         )}
                         {block.type === 'social' && (
                           <div className="flex gap-2 justify-center py-2">
-                            {['facebook', 'instagram', 'tiktok', 'linkedin'].map((network) => {
-                              const icons: Record<string, string> = {
-                                facebook: 'f',
-                                instagram: '📷',
-                                tiktok: '♪',
-                                linkedin: '🔗',
-                              };
-                              const url = ((block.content as Record<string, unknown>)?.[network] as string) || '#';
+                            {[
+                              { id: 'facebook', icon: 'f', color: '#1877F2' },
+                              { id: 'instagram', icon: '📷', color: '#E4405F' },
+                              { id: 'tiktok', icon: '♪', color: '#000000' },
+                              { id: 'linkedin', icon: '🔗', color: '#0A66C2' },
+                            ].map((network) => {
+                              const url = ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
+                              // Ne pas afficher si l'URL est vide
+                              if (!url) return null;
                               return (
                                 <a
-                                  key={network}
+                                  key={network.id}
                                   href={url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold hover:bg-primary/30"
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
+                                  style={{ backgroundColor: network.color }}
+                                  title={network.id}
                                 >
-                                  {icons[network]}
+                                  {network.icon}
                                 </a>
                               );
-                            })}
+                            }).filter(Boolean)}
                           </div>
                         )}
                       </div>
