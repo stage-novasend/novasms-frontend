@@ -2,46 +2,16 @@
  * Campaign API Service
  * Centralized API calls for campaign management
  * Base URL: /api/campaigns
+ * Uses axios client with JWT interceptors for proper authentication
  */
 
+import api from './axios';
 import type {
   CampaignAPICreateRequest,
   CampaignAPIUpdateRequest,
   CampaignAPIResponse,
   CampaignAPIListResponse,
 } from '@/types/campaign.types';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-const CAMPAIGNS_ENDPOINT = `${API_BASE_URL}/campaigns`;
-
-/**
- * API Error Handler
- */
-interface CampaignAPIError {
-  status: number;
-  message: string;
-  data?: unknown;
-}
-
-function createAPIError(status: number, message: string, data?: unknown): Error & CampaignAPIError {
-  const error = new Error(message) as Error & CampaignAPIError;
-  error.status = status;
-  error.message = message;
-  error.data = data;
-  return error;
-}
-
-const handleResponse = async (response: Response) => {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw createAPIError(
-      response.status,
-      error.message || `API Error: ${response.status}`,
-      error
-    );
-  }
-  return response.json();
-};
 
 /**
  * Campaign API Endpoints
@@ -52,15 +22,15 @@ export const campaignApi = {
    * POST /api/campaigns
    */
   create: async (payload: CampaignAPICreateRequest): Promise<CampaignAPIResponse> => {
-    const response = await fetch(CAMPAIGNS_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(payload),
-    });
-    return handleResponse(response);
+    try {
+      console.log('📡 Creating campaign:', payload);
+      const response = await api.post<CampaignAPIResponse>('/campaigns', payload);
+      console.log('✅ Campaign created:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error creating campaign:', error);
+      throw error;
+    }
   },
 
   /**
@@ -73,21 +43,22 @@ export const campaignApi = {
     limit?: number;
     offset?: number;
   }): Promise<CampaignAPIListResponse> => {
-    const params = new URLSearchParams();
-    if (options?.status) params.append('status', options.status);
-    if (options?.channel) params.append('channel', options.channel);
-    if (options?.limit) params.append('limit', options.limit.toString());
-    if (options?.offset) params.append('offset', options.offset.toString());
+    try {
+      console.log('📡 Fetching campaigns:', options);
+      const params = new URLSearchParams();
+      if (options?.status) params.append('status', options.status);
+      if (options?.channel) params.append('channel', options.channel);
+      if (options?.limit) params.append('limit', options.limit.toString());
+      if (options?.offset) params.append('offset', options.offset.toString());
 
-    const url = `${CAMPAIGNS_ENDPOINT}${params.toString() ? '?' + params.toString() : ''}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-    return handleResponse(response);
+      const queryString = params.toString() ? `?${params.toString()}` : '';
+      const response = await api.get<CampaignAPIListResponse>(`/campaigns${queryString}`);
+      console.log('✅ Campaigns retrieved:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching campaigns:', error);
+      throw error;
+    }
   },
 
   /**
@@ -95,33 +66,31 @@ export const campaignApi = {
    * GET /api/campaigns/:id
    */
   get: async (id: string): Promise<CampaignAPIResponse> => {
-    const response = await fetch(`${CAMPAIGNS_ENDPOINT}/${id}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-    return handleResponse(response);
+    try {
+      console.log('📡 Fetching campaign:', id);
+      const response = await api.get<CampaignAPIResponse>(`/campaigns/${id}`);
+      console.log('✅ Campaign retrieved:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching campaign:', error);
+      throw error;
+    }
   },
 
   /**
    * Update campaign
    * PATCH /api/campaigns/:id
    */
-  update: async (
-    id: string,
-    payload: CampaignAPIUpdateRequest
-  ): Promise<CampaignAPIResponse> => {
-    const response = await fetch(`${CAMPAIGNS_ENDPOINT}/${id}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify(payload),
-    });
-    return handleResponse(response);
+  update: async (id: string, payload: CampaignAPIUpdateRequest): Promise<CampaignAPIResponse> => {
+    try {
+      console.log('📡 Updating campaign:', id, payload);
+      const response = await api.patch<CampaignAPIResponse>(`/campaigns/${id}`, payload);
+      console.log('✅ Campaign updated:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error updating campaign:', error);
+      throw error;
+    }
   },
 
   /**
@@ -129,14 +98,15 @@ export const campaignApi = {
    * DELETE /api/campaigns/:id
    */
   delete: async (id: string): Promise<{ success: boolean }> => {
-    const response = await fetch(`${CAMPAIGNS_ENDPOINT}/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-    return handleResponse(response);
+    try {
+      console.log('🗑️  Deleting campaign:', id);
+      const response = await api.delete<{ success: boolean }>(`/campaigns/${id}`);
+      console.log('✅ Campaign deleted');
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error deleting campaign:', error);
+      throw error;
+    }
   },
 
   /**
@@ -144,21 +114,24 @@ export const campaignApi = {
    * POST /api/campaigns/:id/send
    */
   send: async (id: string): Promise<CampaignAPIResponse> => {
-    const response = await fetch(`${CAMPAIGNS_ENDPOINT}/${id}/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-    return handleResponse(response);
+    try {
+      console.log('🚀 Sending campaign:', id);
+      const response = await api.post<CampaignAPIResponse>(`/campaigns/${id}/send`, {});
+      console.log('✅ Campaign sent:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error sending campaign:', error);
+      throw error;
+    }
   },
 
   /**
    * Get campaign analytics
    * GET /api/campaigns/:id/analytics
    */
-  analytics: async (id: string): Promise<{
+  analytics: async (
+    id: string,
+  ): Promise<{
     sent: number;
     delivered: number;
     opened: number;
@@ -166,15 +139,21 @@ export const campaignApi = {
     converted: number;
     bounced: number;
   }> => {
-    const response = await fetch(`${CAMPAIGNS_ENDPOINT}/${id}/analytics`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-    return handleResponse(response);
+    try {
+      console.log('📊 Fetching analytics for campaign:', id);
+      const response = await api.get<{
+        sent: number;
+        delivered: number;
+        opened: number;
+        clicked: number;
+        converted: number;
+        bounced: number;
+      }>(`/campaigns/${id}/analytics`);
+      console.log('✅ Analytics retrieved:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching analytics:', error);
+      throw error;
+    }
   },
 };
-
-export type { CampaignAPIError };

@@ -49,7 +49,12 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
   };
 
   const handleABTestChange = () => {
-    const abTestConfig = draft.abTest || { enabled: false, splitRatio: 20 };
+    const abTestConfig = draft.abTest || {
+      enabled: false,
+      splitRatio: 20,
+      variantA: { emailSubject: '', smsMessage: '' },
+      variantB: { emailSubject: '', smsMessage: '' },
+    };
     setDraftABTest({ ...abTestConfig, enabled: abEnabled, splitRatio });
   };
 
