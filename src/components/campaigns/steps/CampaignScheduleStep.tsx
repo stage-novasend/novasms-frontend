@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useCampaignStore } from '@/store/campaign.store';
 import { saveCampaignDraft, sendCampaign, cancelCampaign } from '@/services/campaignService';
+import api from '@/api/axios';
 
 interface CampaignScheduleStepProps {
   onSubmit: () => void;
@@ -18,7 +19,6 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     setDraftABTest,
     clearDraft,
     selectedCampaignId,
-    submitCampaign,
   } = useCampaignStore();
 
   const [scheduleType, setScheduleType] = useState<'immediate' | 'scheduled'>(
@@ -37,7 +37,25 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
   const [timezone, setTimezone] = useState(draft.schedule?.timezone || 'Africa/Abidjan');
   const [abEnabled, setAbEnabled] = useState(draft.abTest?.enabled || false);
   const [splitRatio, setSplitRatio] = useState(draft.abTest?.splitRatio || 20);
+  const [promoCode, setPromoCode] = useState(draft.promoCode || '');
   const [isSaving, setIsSaving] = useState(false);
+
+  const buildEmailTextContent = () => {
+    const blocks = draft.emailContent?.blocks || [];
+    return blocks
+      .map((block) => {
+        if (block.type === 'text' && typeof block.content.text === 'string') {
+          return block.content.text;
+        }
+        if (block.type === 'button' && typeof block.content.text === 'string') {
+          return block.content.text;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+  };
 
   const handleScheduleChange = () => {
     if (scheduleType === 'scheduled' && scheduledDate && scheduledTime) {
@@ -58,8 +76,13 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     setDraftABTest({ ...abTestConfig, enabled: abEnabled, splitRatio });
   };
 
-  // 📌 Enregistrer brouillon
+  // 📌 Enregistrer brouillon (ne requiert PAS de segmentId)
   const handleSaveDraft = async () => {
+    if (!draft.channel || !draft.name) {
+      toast.error('Veuillez indiquer un nom et un canal pour la campagne');
+      return;
+    }
+
     setIsSaving(true);
     handleScheduleChange();
     handleABTestChange();
@@ -67,30 +90,34 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     try {
       console.log('💾 Saving draft from schedule step...');
 
-      // If no campaignId, first create the campaign to get an ID
       let campaignId = selectedCampaignId;
       if (!campaignId) {
-        console.log('📝 Creating campaign first to get ID...');
-        const result = await submitCampaign();
-        if (!result.success) {
-          toast.error('Erreur: Impossible de créer la campagne');
-          setIsSaving(false);
-          return;
-        }
-        campaignId = result.campaignId;
-        console.log('✅ Campaign created with ID:', campaignId);
+        console.log('📝 Creating minimal campaign draft...');
+        const createRes = await api.post<{ id: string }>('/campaigns', {
+          channelType: draft.channel,
+          name: draft.name,
+          status: 'DRAFT',
+        });
+        campaignId = createRes.data.id;
+        useCampaignStore.setState({ selectedCampaignId: campaignId });
+        console.log('✅ Campaign draft created with ID:', campaignId);
       }
 
       const subject = draft.channel === 'EMAIL' ? draft.emailContent?.subject : undefined;
-      const content = draft.channel === 'SMS' ? draft.smsContent?.message : undefined;
+      const content =
+        draft.channel === 'SMS'
+          ? draft.smsContent?.message
+          : buildEmailTextContent();
 
-      const draftData = {
+      const draftData: Record<string, unknown> = {
         name: draft.name,
-        subject,
-        content,
-        segmentId: draft.segmentId,
         timezone,
       };
+      if (subject) draftData.subject = subject;
+      if (content) draftData.content = content;
+      if (draft.emailContent?.blocks) draftData.contentJson = draft.emailContent.blocks;
+      if (draft.segmentId) draftData.segmentId = draft.segmentId;
+      if (promoCode) draftData.promoCode = promoCode;
 
       const result = await saveCampaignDraft(campaignId, draftData);
       setIsSaving(false);
@@ -104,7 +131,7 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       }
     } catch (err) {
       console.error('❌ Error in handleSaveDraft:', err);
-      toast.error('Erreur lors de la sauvegarde');
+      toast.error('Erreur lors de la sauvegarde du brouillon');
       setIsSaving(false);
     }
   };
@@ -117,7 +144,10 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     }
 
     const subject = draft.channel === 'EMAIL' ? draft.emailContent?.subject : undefined;
-    const content = draft.channel === 'SMS' ? draft.smsContent?.message : undefined;
+    const content =
+      draft.channel === 'SMS'
+        ? draft.smsContent?.message
+        : buildEmailTextContent();
 
     if (!subject && !content) {
       toast.error('Veuillez ajouter du contenu à votre campagne');
@@ -134,15 +164,34 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       let campaignId = selectedCampaignId;
       if (!campaignId) {
         console.log('📝 Creating campaign first to get ID...');
-        const submitResult = await submitCampaign();
-        if (!submitResult.success) {
-          toast.error('Erreur: Impossible de créer la campagne');
-          setIsSaving(false);
-          return;
-        }
-        campaignId = submitResult.campaignId;
+        const createRes = await api.post<{ id: string }>('/campaigns', {
+          channelType: draft.channel,
+          name: draft.name,
+          segmentId: draft.segmentId,
+          promoCode: promoCode || undefined,
+          subject,
+          content,
+          estimatedRecipients: draft.estimatedRecipients || 0,
+          estimatedCost: draft.estimatedCost || 0,
+          status: 'DRAFT',
+        });
+        campaignId = createRes.data.id;
+        useCampaignStore.setState({ selectedCampaignId: campaignId });
         console.log('✅ Campaign created with ID:', campaignId);
       }
+
+      const draftData: Record<string, unknown> = {
+        name: draft.name,
+        segmentId: draft.segmentId,
+        timezone,
+        estimatedRecipients: draft.estimatedRecipients || 0,
+        estimatedCost: draft.estimatedCost || 0,
+      };
+      if (subject) draftData.subject = subject;
+      if (content) draftData.content = content;
+      if (draft.emailContent?.blocks) draftData.contentJson = draft.emailContent.blocks;
+      if (promoCode) draftData.promoCode = promoCode;
+      await saveCampaignDraft(campaignId, draftData);
 
       let scheduledAt = undefined;
       if (scheduleType === 'scheduled' && scheduledDate && scheduledTime) {
@@ -321,6 +370,21 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Promo Code */}
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-on-surface">Code promo (EN-1688)</label>
+              <input
+                type="text"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="Ex: SUMMER2024"
+                className="w-full px-4 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition"
+              />
+              <p className="text-xs text-on-surface-variant">
+                Variable {"{"}{"{"} promoCode {"}"}{"}"}  sera remplacée par cette valeur dans les messages
+              </p>
             </div>
 
             {/* A/B Test Options */}

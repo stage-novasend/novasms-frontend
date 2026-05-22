@@ -2,45 +2,75 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Bolt, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
+// auth store not needed here to avoid clearing session on link click
+
+const verificationRequests = new Map<
+  string,
+  Promise<{ success: boolean; message: string }>
+>();
+
+function getVerificationRequest(token: string) {
+  const existingRequest = verificationRequests.get(token);
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const request = fetch(`http://localhost:3000/api/auth/verify-email/${token}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then(async (response) => {
+      const json = (await response.json()) as { success?: boolean; message?: string };
+      if (!response.ok || !json.success) {
+        throw new Error(json.message || 'Lien invalide ou expiré.');
+      }
+      return { success: true, message: json.message || 'Votre email est confirmé. Redirection...' };
+    })
+    .finally(() => {
+      verificationRequests.delete(token);
+    });
+
+  verificationRequests.set(token, request);
+  return request;
+}
 
 export default function VerifyEmail() {
-  const logout = useAuthStore((state) => state.logout);
+  // keep auth intact while verifying via email link
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    logout();
-  }, [logout]);
+  // no-op: do not clear auth on mount
 
   useEffect(() => {
+    let cancelled = false;
+
     const verify = async () => {
       try {
-        const res = await fetch(`http://localhost:3000/api/auth/verify-email/${token}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const json = await res.json();
+        const result = await getVerificationRequest(token || '');
 
-        if (json.success) {
+        if (cancelled) return;
+
+        if (result.success) {
           setStatus('success');
-          setMessage('Votre email est confirmé. Redirection...');
+          setMessage(result.message);
           setTimeout(() => navigate('/confirmation-success'), 1500);
-        } else {
-          setStatus('error');
-          setMessage(json.message || 'Lien invalide ou expiré.');
         }
-      } catch {
+      } catch (error) {
+        if (cancelled) return;
         setStatus('error');
-        setMessage('Erreur de connexion au serveur.');
+        setMessage(error instanceof Error ? error.message : 'Erreur de connexion au serveur.');
       }
     };
 
     if (token) {
       verify();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [token, navigate]);
 
   return (

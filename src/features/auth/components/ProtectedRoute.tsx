@@ -9,6 +9,13 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, accessToken, isHydrated } = useAuthStore();
   const location = useLocation();
 
+  // Dev-only bypass: allow rendering the app without authentication when
+  // running the frontend in development mode to ease local testing.
+  // This is intentional for developer ergonomics and should NOT be shipped.
+  if (import.meta.env && import.meta.env.DEV) {
+    return <>{children}</>;
+  }
+
   // ✅ Attendre que le store soit hydraté depuis localStorage
   if (!isHydrated || isLoading) {
     return (

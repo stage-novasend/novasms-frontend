@@ -6,7 +6,7 @@
 // Internal Domain Types (from store/campaign.store.ts)
 export interface CampaignBlock {
   id: string;
-  type: 'text' | 'image' | 'button' | 'product' | 'divider' | 'social';
+  type: 'text' | 'image' | 'button' | 'product' | 'divider' | 'social' | 'columns' | 'spacing' | 'html';
   content: Record<string, unknown>;
 }
 
@@ -71,15 +71,16 @@ export interface Campaign {
 export interface CampaignAPICreateRequest {
   name: string;
   description?: string;
-  channel: 'SMS' | 'EMAIL';
-  segmentId: string;
+  channelType: 'SMS' | 'EMAIL';
+  segmentId?: string;
   emailContent?: EmailContent;
   smsContent?: SMSContent;
   abTest?: ABTestConfig;
   schedule?: ScheduleConfig;
   estimatedRecipients?: number;
   estimatedCost?: number;
-  status: 'draft' | 'scheduled' | 'sent' | 'paused' | 'failed';
+    promoCode?: string; // EN-1688: Personalization variable
+  status: string;
 }
 
 export type CampaignAPIUpdateRequest = Partial<CampaignAPICreateRequest>;
@@ -143,12 +144,16 @@ export const CONTACT_VARIABLES = {
     lastName: '{{lastName}}',
     email: '{{email}}',
     phone: '{{phone}}',
+    shopName: '{{shopName}}',
+    promoCode: '{{promoCode}}',
     tags: '{{tags}}',
     customField1: '{{customField1}}',
   },
   sms: {
     firstName: '{{firstName}}',
     phone: '{{phone}}',
+    shopName: '{{shopName}}',
+    promoCode: '{{promoCode}}',
     customField1: '{{customField1}}',
   },
 };

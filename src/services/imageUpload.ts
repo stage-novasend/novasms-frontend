@@ -3,6 +3,8 @@
  * Uploader les images au serveur et récupérer les URLs
  */
 
+import api from '@/api/axios';
+
 interface UploadedImage {
   id: string;
   url: string; // URL serveur
@@ -14,6 +16,11 @@ interface UploadedImage {
 
 class ImageUploadService {
   private uploadedImages: Map<string, UploadedImage> = new Map();
+
+  private getApiBaseUrl(): string {
+    const configured = import.meta.env.VITE_API_URL as string | undefined;
+    return (configured || 'http://localhost:3000').replace(/\/$/, '');
+  }
 
   /**
    * Upload une image au serveur
@@ -28,33 +35,34 @@ class ImageUploadService {
     formData.append('file', file);
 
     try {
-      const response = await fetch(
-        `/api/campaigns/${campaignId}/images/upload`,
+      const response = await api.post(
+        `/campaigns/${campaignId}/images/upload`,
+        formData,
         {
-          method: 'POST',
-          body: formData,
-          credentials: 'include', // For JWT cookies
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
         },
       );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Upload error:', response.status, errorText);
-        throw new Error(
-          `Upload failed (${response.status}): ${errorText}`,
-        );
-      }
-
-      const data = await response.json();
+      const data = response.data;
       console.log('✅ Image uploaded:', data);
       const uploadedImage: UploadedImage = {
         id: data.id,
-        url: data.url,
+        url: this.resolveImageUrl(data.url),
         name: data.fileName,
         size: data.size,
         type: data.type,
         uploadedAt: new Date(data.uploadedAt),
       };
+
+      console.debug('[ImageUpload] uploaded image', {
+        campaignId,
+        id: uploadedImage.id,
+        fileName: uploadedImage.name,
+        rawUrl: data.url,
+        resolvedUrl: uploadedImage.url,
+      });
 
       this.uploadedImages.set(data.id, uploadedImage);
       return uploadedImage;
@@ -89,8 +97,21 @@ class ImageUploadService {
    * Obtenir une miniature URL
    */
   getThumbnail(imageUrl: string): string {
-    // Image URL est fournie par le serveur
-    return imageUrl;
+    const resolved = this.resolveImageUrl(imageUrl);
+    console.debug('[ImageUpload] thumbnail resolved', { input: imageUrl, resolved });
+    return resolved;
+  }
+
+  resolveImageUrl(imageUrl: string): string {
+    if (!imageUrl) return imageUrl;
+    if (/^https?:\/\//i.test(imageUrl)) {
+      console.debug('[ImageUpload] absolute url kept as-is', { imageUrl });
+      return imageUrl;
+    }
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    const resolved = `${this.getApiBaseUrl()}${path}`;
+    console.debug('[ImageUpload] relative url resolved', { imageUrl, resolved });
+    return resolved;
   }
 
   /**

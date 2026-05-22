@@ -1,9 +1,11 @@
 import { useAuthStore } from '@/stores/authStore';
 import { Link, useNavigate } from 'react-router-dom';
+import { useCampaignActions } from '@/hooks/useCampaign';
 
 export default function Header() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { createNewCampaign } = useCampaignActions();
 
   const handleLogout = () => {
     logout();
@@ -24,9 +26,16 @@ export default function Header() {
         <button type="button" className="credits-recharge" onClick={handleLogout}>
           Déconnexion
         </button>
-        <Link to="/campaigns/new" className="btn-primary">
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={async () => {
+            await createNewCampaign();
+            navigate('/campaigns/new?fresh=1');
+          }}
+        >
           + Nouvelle campagne
-        </Link>
+        </button>
         <div className="avatar">
           {user?.name
             ? user.name

@@ -2,15 +2,25 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppMetrics } from '@/hooks/useAppMetrics';
 import { contactsApi } from '@/api/contacts';
+import { useCampaignStore } from '@/store/campaign.store';
+import { Link, useNavigate } from 'react-router-dom';
+import { useCampaignActions } from '@/hooks/useCampaign';
 import type { SegmentWithContacts } from '@/features/contacts/types/contact';
 import { BarChart3, Zap, TrendingUp, Users } from 'lucide-react';
 import WelcomeChecklist from '@/components/WelcomeChecklist';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { user, isFirstLogin } = useAuthStore();
   const { contactsTotal, credits } = useAppMetrics();
+  const { campaigns, fetchCampaigns, isLoading: campaignsLoading } = useCampaignStore();
+  const { createNewCampaign } = useCampaignActions();
   const [segments, setSegments] = useState<SegmentWithContacts[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
+
+  useEffect(() => {
+    void fetchCampaigns();
+  }, [fetchCampaigns]);
 
   const formatSegmentFormula = (criteria: SegmentWithContacts['criteria']) => {
     const payload = criteria as { logic?: string; rules?: Array<{ field?: string; operator?: string; value?: unknown }> };
@@ -139,7 +149,13 @@ export default function Dashboard() {
           les canaux.
         </p>
         <div className="flex gap-4 flex-wrap">
-          <button className="px-6 py-3 bg-on-primary text-primary font-semibold rounded-lg hover:shadow-lg transition-all hover:scale-105">
+          <button
+            className="px-6 py-3 bg-on-primary text-primary font-semibold rounded-lg hover:shadow-lg transition-all hover:scale-105"
+            onClick={async () => {
+              await createNewCampaign();
+              navigate('/campaigns/new?fresh=1');
+            }}
+          >
             ➕ Nouvelle campagne
           </button>
           <button className="px-6 py-3 bg-on-primary/20 text-on-primary font-semibold rounded-lg hover:bg-on-primary/30 transition-all">
@@ -152,12 +168,40 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-surface rounded-xl shadow-sm p-6 border border-outline-variant/30">
           <h2 className="text-lg font-bold text-on-surface mb-4">Campagnes récentes</h2>
-          <div className="text-center py-8">
-            <p className="text-on-surface-variant">Aucune campagne créée pour le moment.</p>
-            <p className="text-sm text-on-surface-variant mt-2">
-              Créez votre première campagne pour commencer!
-            </p>
-          </div>
+          {campaignsLoading ? (
+            <div className="text-center py-8">
+              <p className="text-on-surface-variant">Chargement des campagnes...</p>
+            </div>
+          ) : campaigns.length > 0 ? (
+            <div className="space-y-3">
+              {campaigns.slice(0, 5).map((campaign) => (
+                <Link
+                  key={campaign.id}
+                  to={`/campaigns/${campaign.id}`}
+                  className="block rounded-lg border border-outline-variant/30 bg-background/50 p-4 transition-all hover:border-primary/30 hover:bg-primary/5"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h3 className="font-semibold text-on-surface">{campaign.name}</h3>
+                      <p className="text-xs text-on-surface-variant mt-1">
+                        {campaign.channel} · {campaign.status}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-primary">
+                      {new Date(campaign.updatedAt).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-on-surface-variant">Aucune campagne créée pour le moment.</p>
+              <p className="text-sm text-on-surface-variant mt-2">
+                Créez votre première campagne pour commencer!
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="bg-surface rounded-xl shadow-sm p-6 border border-outline-variant/30">

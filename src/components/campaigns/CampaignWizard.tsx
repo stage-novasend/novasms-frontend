@@ -1,10 +1,14 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useCampaignStore } from '@/store/campaign.store';
 import { CampaignChannelStep } from './steps/CampaignChannelStep';
 import { CampaignContentStep } from './steps/CampaignContentStep';
 import { CampaignAudienceStep } from './steps/CampaignAudienceStep';
 import { CampaignScheduleStep } from './steps/CampaignScheduleStep';
+import api from '@/api/axios';
+import { saveCampaignDraft } from '@/services/campaignService';
+import { getCampaignDetails } from '@/services/campaignService';
 
 /**
  * CampaignWizard — Orchestrate 4-step workflow
@@ -13,18 +17,98 @@ import { CampaignScheduleStep } from './steps/CampaignScheduleStep';
  */
 
 export const CampaignWizard: FC = () => {
+  const { id: campaignId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     draft,
     setDraftStep,
     saveDraft,
     clearDraft,
-    submitCampaign,
+    selectedCampaignId,
     error,
     isLoading,
   } = useCampaignStore();
 
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [isSavingAndLeaving, setIsSavingAndLeaving] = useState(false);
+
+  useEffect(() => {
+    const shouldReset = searchParams.get('fresh') === '1';
+    if (shouldReset) {
+      clearDraft();
+      setDraftStep(1);
+      searchParams.delete('fresh');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [clearDraft, searchParams, setDraftStep, setSearchParams]);
+
+  useEffect(() => {
+    if (!campaignId) return;
+
+    const hydrateCampaign = async () => {
+      try {
+        const result = await getCampaignDetails(campaignId);
+        if (!result.success || !result.data) return;
+        const campaign = result.data as Record<string, unknown>;
+        const contentJson =
+          campaign.contentJson && typeof campaign.contentJson === 'object' && !Array.isArray(campaign.contentJson)
+            ? (campaign.contentJson as Record<string, unknown>)
+            : undefined;
+        useCampaignStore.setState({
+          selectedCampaignId: campaignId,
+          draft: {
+            step: 1,
+            channel: typeof campaign.channelType === 'string' && campaign.channelType === 'SMS' ? 'SMS' : 'EMAIL',
+            name: typeof campaign.name === 'string' ? campaign.name : undefined,
+            description: typeof campaign.description === 'string' ? campaign.description : undefined,
+            segmentId: typeof campaign.segmentId === 'string' ? campaign.segmentId : undefined,
+            segmentName: typeof (campaign.segment as Record<string, unknown> | undefined)?.name === 'string'
+              ? String((campaign.segment as Record<string, unknown>).name)
+              : undefined,
+            emailContent:
+              typeof campaign.channelType === 'string' && campaign.channelType === 'EMAIL'
+                ? {
+                    subject:
+                      typeof campaign.subject === 'string'
+                        ? campaign.subject
+                        : typeof contentJson?.subject === 'string'
+                          ? String(contentJson.subject)
+                          : '',
+                    preheader:
+                      typeof contentJson?.preheader === 'string'
+                        ? String(contentJson.preheader)
+                        : '',
+                    blocks: Array.isArray(contentJson?.blocks)
+                      ? (contentJson.blocks as never[])
+                      : [],
+                  }
+                : undefined,
+            smsContent:
+              typeof campaign.channelType === 'string' && campaign.channelType === 'SMS'
+                ? {
+                    message:
+                      typeof campaign.content === 'string'
+                        ? campaign.content
+                        : '',
+                    senderName: '',
+                    variables: [],
+                  }
+                : undefined,
+            abTest: campaign.abTest as never,
+            schedule: campaign.schedule as never,
+            estimatedRecipients: typeof campaign.estimatedRecipients === 'number' ? campaign.estimatedRecipients : 0,
+            estimatedCost: typeof campaign.estimatedCost === 'number' ? campaign.estimatedCost : 0,
+            promoCode: typeof campaign.promoCode === 'string' ? campaign.promoCode : '',
+          },
+        });
+      } catch (error) {
+        console.error('Failed to hydrate campaign for editing', error);
+      }
+    };
+
+    void hydrateCampaign();
+  }, [campaignId]);
 
   useEffect(() => {
     if (draftSaved) {
@@ -59,19 +143,8 @@ export const CampaignWizard: FC = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    try {
-      console.log('🚀 Submitting campaign:', draft);
-      const result = await submitCampaign();
-      if (result.success) {
-        console.log('✅ Campaign created:', result.campaignId);
-        // TODO: Redirect to campaign detail/success page
-      } else {
-        console.error('❌ Campaign creation failed');
-      }
-    } catch (err) {
-      console.error('❌ Submit error:', err);
-    }
+  const handleSubmit = () => {
+    // La soumission finale est gérée directement dans CampaignScheduleStep
   };
 
   const handleDiscard = () => {
@@ -80,6 +153,33 @@ export const CampaignWizard: FC = () => {
     setConfirmDiscard(false);
     console.log('✅ Draft cleared, redirecting to /campaigns');
     window.location.href = '/campaigns';
+  };
+
+  const handleSaveAndLeave = async () => {
+    if (!draft.channel || !draft.name) {
+      handleDiscard();
+      return;
+    }
+    setIsSavingAndLeaving(true);
+    try {
+      let campaignId = selectedCampaignId;
+      if (!campaignId) {
+        const createRes = await api.post<{ id: string }>('/campaigns', {
+          channelType: draft.channel,
+          name: draft.name,
+          status: 'DRAFT',
+        });
+        campaignId = createRes.data.id;
+      }
+      const draftData: Record<string, unknown> = { name: draft.name };
+      if (draft.segmentId) draftData.segmentId = draft.segmentId;
+      await saveCampaignDraft(campaignId, draftData);
+      clearDraft();
+      window.location.href = '/campaigns';
+    } catch {
+      clearDraft();
+      window.location.href = '/campaigns';
+    }
   };
 
   const renderStep = () => {
@@ -166,28 +266,33 @@ export const CampaignWizard: FC = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-container-lowest rounded-xl p-8 max-w-sm w-full mx-4 space-y-6">
             <div className="flex items-center gap-4 text-error">
-              <span className="material-symbols-outlined text-4xl">
-                warning
-              </span>
+              <span className="material-symbols-outlined text-4xl">warning</span>
               <h3 className="font-headline font-bold text-lg">
-                Abandonner les modifications ?
+                Abandonner la campagne ?
               </h3>
             </div>
             <p className="text-on-surface-variant text-sm">
-              Vos modifications seront définitivement perdues.
+              Que souhaitez-vous faire avec votre campagne en cours ?
             </p>
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-3">
               <button
                 onClick={() => setConfirmDiscard(false)}
-                className="flex-1 py-3 bg-surface-container-high text-on-surface font-bold rounded-lg hover:bg-surface-container-highest transition-colors"
+                className="w-full py-3 bg-surface-container-high text-on-surface font-bold rounded-lg hover:bg-surface-container-highest transition-colors"
               >
-                Continuer
+                Continuer l'édition
+              </button>
+              <button
+                onClick={handleSaveAndLeave}
+                disabled={isSavingAndLeaving}
+                className="w-full py-3 bg-primary text-on-primary font-bold rounded-lg hover:brightness-110 transition-colors disabled:opacity-50"
+              >
+                {isSavingAndLeaving ? 'Sauvegarde...' : 'Enregistrer brouillon et quitter'}
               </button>
               <button
                 onClick={handleDiscard}
-                className="flex-1 py-3 text-error font-semibold hover:bg-error-container/20 rounded-lg transition-colors"
+                className="w-full py-3 text-error font-semibold hover:bg-error-container/20 rounded-lg transition-colors"
               >
-                Quitter
+                Quitter sans sauvegarder
               </button>
             </div>
           </div>

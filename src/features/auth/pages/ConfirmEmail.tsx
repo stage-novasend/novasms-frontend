@@ -1,11 +1,10 @@
 import { motion } from 'framer-motion';
 import { Bolt, Info, Loader2, PencilLine, Check, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { useAuthStore } from '@/stores/authStore';
-
+import { useState } from 'react';
+// intentionally keep session while confirming email
 export default function ConfirmEmail() {
-  const logout = useAuthStore((state) => state.logout);
+  // do not forcibly logout when showing confirmation instructions
   const location = useLocation();
   const [isResending, setIsResending] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -20,9 +19,7 @@ export default function ConfirmEmail() {
   const email = emailFromState || localStorage.getItem('novasms-pending-confirmation-email') || '';
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
-  useEffect(() => {
-    logout();
-  }, [logout]);
+  // intentionally keep existing session while user resends or edits email
 
   const handleResend = async () => {
     const targetEmail = (isEditingEmail ? draftEmail : email).trim();

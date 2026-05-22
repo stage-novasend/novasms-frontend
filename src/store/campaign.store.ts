@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { campaignApi } from '@/api/campaignApi';
 import type {
-  CampaignAPICreateRequest,
   CampaignAPIUpdateRequest,
   Campaign as CampaignModel,
   CampaignBlock as CampaignBlockModel,
@@ -35,6 +34,7 @@ export interface CampaignDraft {
   description?: string;
   segmentId?: string;
   segmentName?: string; // Track segment name for display
+    promoCode?: string; // EN-1688: Personalization variable
   emailContent?: EmailContent;
   smsContent?: SMSContent;
   abTest?: ABTestConfig;
@@ -68,6 +68,7 @@ interface CampaignStore {
   deleteCampaign: (id: string) => Promise<void>;
   getCampaign: (id: string) => Campaign | undefined;
   listCampaigns: () => Campaign[];
+  fetchCampaigns: () => Promise<void>;
 
   // Actions: Workflow
   saveDraft: () => void;
@@ -110,6 +111,151 @@ const INITIAL_DRAFT: CampaignDraft = {
     type: 'immediate',
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   },
+  promoCode: '',
+};
+
+const normalizeStatus = (status: string | undefined): Campaign['status'] => {
+  const value = (status || '').toUpperCase();
+  if (value === 'DRAFT') return 'draft';
+  if (value === 'SCHEDULED') return 'scheduled';
+  if (value === 'SENT') return 'sent';
+  if (value === 'FAILED') return 'failed';
+  if (value === 'SENDING') return 'scheduled';
+  if (value === 'CANCELLED') return 'failed';
+  if (value === 'PAUSED') return 'paused';
+  return 'draft';
+};
+
+const normalizeChannel = (value: unknown): Campaign['channel'] => {
+  const channel = typeof value === 'string' ? value.toUpperCase() : '';
+  return channel === 'SMS' ? 'SMS' : 'EMAIL';
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+};
+
+const normalizeEmailContent = (response: Record<string, unknown>): EmailContent | undefined => {
+  const emailContent = response.emailContent;
+  if (emailContent && typeof emailContent === 'object' && !Array.isArray(emailContent)) {
+    return emailContent as EmailContent;
+  }
+
+  const channel = normalizeChannel(response.channel || response.channelType);
+  if (channel !== 'EMAIL') return undefined;
+
+  const contentJson = asRecord(response.contentJson);
+  if (!contentJson) return undefined;
+
+  return {
+    subject:
+      typeof contentJson.subject === 'string'
+        ? contentJson.subject
+        : typeof response.subject === 'string'
+          ? response.subject
+          : '',
+    preheader:
+      typeof contentJson.preheader === 'string' ? contentJson.preheader : '',
+    blocks: Array.isArray(contentJson.blocks)
+      ? (contentJson.blocks as CampaignBlock[])
+      : [],
+  };
+};
+
+const normalizeSmsContent = (response: Record<string, unknown>): SMSContent | undefined => {
+  const smsContent = response.smsContent;
+  if (smsContent && typeof smsContent === 'object' && !Array.isArray(smsContent)) {
+    return smsContent as SMSContent;
+  }
+
+  const channel = normalizeChannel(response.channel || response.channelType);
+  if (channel !== 'SMS') return undefined;
+
+  const message = typeof response.content === 'string' ? response.content : '';
+  if (!message) return undefined;
+
+  return {
+    message,
+    senderName: '',
+    variables: [],
+  };
+};
+
+const mapApiCampaignToModel = (raw: unknown): Campaign => {
+  const response =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+
+  const scheduleRaw =
+    response.schedule && typeof response.schedule === 'object'
+      ? (response.schedule as Record<string, unknown>)
+      : null;
+  const scheduleType =
+    scheduleRaw?.type === 'immediate' ||
+    scheduleRaw?.type === 'scheduled' ||
+    scheduleRaw?.type === 'recurring'
+      ? scheduleRaw.type
+      : undefined;
+  const segment =
+    response.segment && typeof response.segment === 'object'
+      ? (response.segment as Record<string, unknown>)
+      : undefined;
+
+  return {
+    id: typeof response.id === 'string' ? response.id : '',
+    accountId: typeof response.accountId === 'string' ? response.accountId : '',
+    name: typeof response.name === 'string' ? response.name : 'Campagne',
+    description:
+      typeof response.description === 'string' ? response.description : undefined,
+    channel: normalizeChannel(response.channel || response.channelType),
+    status:
+      typeof response.status === 'string'
+        ? normalizeStatus(response.status)
+        : 'draft',
+    segmentId: typeof response.segmentId === 'string' ? response.segmentId : '',
+    segmentName:
+      typeof segment?.name === 'string'
+        ? segment.name
+        : typeof response.segmentName === 'string'
+          ? response.segmentName
+          : undefined,
+    emailContent: normalizeEmailContent(response),
+    smsContent: normalizeSmsContent(response),
+    abTest: response.abTest as ABTestConfig | undefined,
+    schedule:
+      scheduleRaw && scheduleType
+        ? {
+            type: scheduleType,
+            timezone:
+              typeof scheduleRaw.timezone === 'string'
+                ? scheduleRaw.timezone
+                : undefined,
+            scheduledAt:
+              typeof scheduleRaw.scheduledAt === 'string'
+                ? new Date(scheduleRaw.scheduledAt)
+                : undefined,
+          }
+        : undefined,
+    estimatedRecipients:
+      typeof response.estimatedRecipients === 'number'
+        ? response.estimatedRecipients
+        : 0,
+    estimatedCost:
+      typeof response.estimatedCost === 'number' ? response.estimatedCost : 0,
+    createdAt:
+      typeof response.createdAt === 'string'
+        ? new Date(response.createdAt)
+        : new Date(),
+    updatedAt:
+      typeof response.updatedAt === 'string'
+        ? new Date(response.updatedAt)
+        : new Date(),
+    sentAt:
+      typeof response.sentAt === 'string'
+        ? new Date(response.sentAt)
+        : undefined,
+    analytics: response.analytics as Campaign['analytics'],
+  };
 };
 
 export const useCampaignStore = create<CampaignStore>()(
@@ -174,10 +320,10 @@ export const useCampaignStore = create<CampaignStore>()(
       createCampaign: async (campaign) => {
         set({ isLoading: true, error: undefined });
         try {
-          const payload: CampaignAPICreateRequest = {
+          const payload = {
+            channelType: campaign.channel,
             name: campaign.name,
             description: campaign.description,
-            channel: campaign.channel,
             segmentId: campaign.segmentId,
             emailContent: campaign.emailContent,
             smsContent: campaign.smsContent,
@@ -185,33 +331,11 @@ export const useCampaignStore = create<CampaignStore>()(
             schedule: campaign.schedule,
             estimatedRecipients: campaign.estimatedRecipients,
             estimatedCost: campaign.estimatedCost,
-            status: campaign.status,
+            status: (campaign.status || 'DRAFT').toUpperCase(),
           };
 
           const response = await campaignApi.create(payload);
-          const newCampaign: Campaign = {
-            id: response.id,
-            accountId: response.accountId,
-            name: response.name,
-            description: response.description,
-            channel: response.channel,
-            status: response.status,
-            segmentId: response.segmentId,
-            segmentName: response.segmentName,
-            emailContent: response.emailContent,
-            smsContent: response.smsContent,
-            abTest: response.abTest,
-            schedule: response.schedule ? {
-              ...response.schedule,
-              scheduledAt: response.schedule.scheduledAt ? new Date(response.schedule.scheduledAt) : undefined,
-            } : undefined,
-            estimatedRecipients: response.estimatedRecipients,
-            estimatedCost: response.estimatedCost,
-            createdAt: new Date(response.createdAt),
-            updatedAt: new Date(response.updatedAt),
-            sentAt: response.sentAt ? new Date(response.sentAt) : undefined,
-            analytics: response.analytics,
-          };
+          const newCampaign: Campaign = mapApiCampaignToModel(response);
 
           set((state) => ({
             campaigns: [...state.campaigns, newCampaign],
@@ -235,7 +359,7 @@ export const useCampaignStore = create<CampaignStore>()(
           const payload: CampaignAPIUpdateRequest = {
             name: updates.name || campaign.name,
             description: updates.description || campaign.description,
-            channel: updates.channel || campaign.channel,
+             channelType: (updates.channel || campaign.channel) as ('SMS' | 'EMAIL'),
             segmentId: updates.segmentId || campaign.segmentId,
             emailContent: updates.emailContent || campaign.emailContent,
             smsContent: updates.smsContent || campaign.smsContent,
@@ -247,29 +371,7 @@ export const useCampaignStore = create<CampaignStore>()(
           };
 
           const response = await campaignApi.update(id, payload);
-          const updated: Campaign = {
-            id: response.id,
-            accountId: response.accountId,
-            name: response.name,
-            description: response.description,
-            channel: response.channel,
-            status: response.status,
-            segmentId: response.segmentId,
-            segmentName: response.segmentName,
-            emailContent: response.emailContent,
-            smsContent: response.smsContent,
-            abTest: response.abTest,
-            schedule: response.schedule ? {
-              ...response.schedule,
-              scheduledAt: response.schedule.scheduledAt ? new Date(response.schedule.scheduledAt) : undefined,
-            } : undefined,
-            estimatedRecipients: response.estimatedRecipients,
-            estimatedCost: response.estimatedCost,
-            createdAt: new Date(response.createdAt),
-            updatedAt: new Date(response.updatedAt),
-            sentAt: response.sentAt ? new Date(response.sentAt) : undefined,
-            analytics: response.analytics,
-          };
+          const updated: Campaign = mapApiCampaignToModel(response);
 
           set((state) => ({
             campaigns: state.campaigns.map((c) => (c.id === id ? updated : c)),
@@ -307,6 +409,29 @@ export const useCampaignStore = create<CampaignStore>()(
         return get().campaigns;
       },
 
+      fetchCampaigns: async () => {
+        set({ isLoading: true, error: undefined });
+        try {
+          const response = await campaignApi.list();
+          const responseObject = response as unknown as Record<string, unknown>;
+          const responseData = responseObject.data;
+          const list = Array.isArray(responseData)
+            ? responseData
+            : Array.isArray(response)
+              ? response
+              : [];
+
+          const campaigns = list.map((item) =>
+            mapApiCampaignToModel(item as Record<string, unknown>),
+          );
+          set({ campaigns, isLoading: false });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Chargement impossible';
+          set({ isLoading: false, error: message });
+        }
+      },
+
       // Workflow
       saveDraft: () => {
         // Automatically persisted by Zustand localStorage middleware
@@ -330,6 +455,7 @@ export const useCampaignStore = create<CampaignStore>()(
                 schedule: campaign.schedule,
                 estimatedRecipients: campaign.estimatedRecipients,
                 estimatedCost: campaign.estimatedCost,
+                promoCode: (campaign as unknown as { promoCode?: string }).promoCode,
               },
               selectedCampaignId: campaignId,
             });
@@ -366,8 +492,8 @@ export const useCampaignStore = create<CampaignStore>()(
               smsContent: draft.smsContent,
               abTest: draft.abTest,
               schedule: draft.schedule,
-              estimatedRecipients: draft.estimatedRecipients || 0,
-              estimatedCost: draft.estimatedCost || 0,
+              estimatedRecipients: draft.estimatedRecipients ?? 0,
+              estimatedCost: draft.estimatedCost ?? 0,
               status: 'scheduled',
             });
           } else {
@@ -382,8 +508,8 @@ export const useCampaignStore = create<CampaignStore>()(
               smsContent: draft.smsContent,
               abTest: draft.abTest,
               schedule: draft.schedule,
-              estimatedRecipients: draft.estimatedRecipients || 0,
-              estimatedCost: draft.estimatedCost || 0,
+              estimatedRecipients: draft.estimatedRecipients ?? 0,
+              estimatedCost: draft.estimatedCost ?? 0,
               status: 'scheduled',
             });
             set({ selectedCampaignId: campaign.id });

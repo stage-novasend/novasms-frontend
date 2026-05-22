@@ -157,6 +157,16 @@ export const contactsApi = {
     return response.data;
   },
 
+  createSegmentFromContacts: async (name: string, contactIds: string[]) => {
+    const response = await api.post<{ success: boolean; segment: DynamicSegment }>('/contacts/segments', {
+      name,
+      logic: 'AND',
+      criteria: [],
+      contactIds,
+    });
+    return response.data;
+  },
+
   listSegments: async () => {
     const response = await api.get<{ data: DynamicSegment[] }>('/contacts/segments');
     return response.data.data;
