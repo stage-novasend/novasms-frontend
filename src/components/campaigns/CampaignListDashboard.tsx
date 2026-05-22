@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCampaignStore } from '@/store/campaign.store';
 import { useCampaignActions } from '@/hooks/useCampaign';
@@ -18,19 +18,18 @@ import type { Campaign, CampaignStatus } from '@/store/campaign.store';
 
 const CampaignListDashboard: FC = () => {
   const navigate = useNavigate();
-  const {
-    campaigns,
-    deleteCampaign,
-    isLoading,
-    error,
-  } = useCampaignStore();
-  const { duplicateCampaign } = useCampaignActions();
+  const { campaigns, deleteCampaign, fetchCampaigns, isLoading, error } = useCampaignStore();
+  const { duplicateCampaign, createNewCampaign } = useCampaignActions();
 
   const [statusFilter, setStatusFilter] = useState<CampaignStatus | 'all'>('all');
   const [channelFilter, setChannelFilter] = useState<'all' | 'SMS' | 'EMAIL'>('all');
   const [sortBy, setSortBy] = useState<'date' | 'cost'>('date');
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchCampaigns();
+  }, [fetchCampaigns]);
 
   const filteredCampaigns = useMemo<Campaign[]>(() => {
     let result = [...campaigns];
@@ -44,15 +43,11 @@ const CampaignListDashboard: FC = () => {
     }
 
     if (searchTerm) {
-      result = result.filter((c) =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      result = result.filter((c) => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
     }
 
     if (sortBy === 'date') {
-      result.sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      );
+      result.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     } else if (sortBy === 'cost') {
       result.sort((a, b) => b.estimatedCost - a.estimatedCost);
     }
@@ -87,9 +82,7 @@ const CampaignListDashboard: FC = () => {
   };
 
   const getChannelIcon = (channel: string) => {
-    return channel === 'SMS'
-      ? '💬'
-      : '📧';
+    return channel === 'SMS' ? '💬' : '📧';
   };
 
   const formatDate = (date: Date | string) => {
@@ -109,9 +102,7 @@ const CampaignListDashboard: FC = () => {
     <div className="max-w-7xl mx-auto px-8 py-12">
       {/* Header */}
       <div className="mb-12">
-        <h1 className="font-headline font-black text-4xl text-on-surface mb-2">
-          Campagnes
-        </h1>
+        <h1 className="font-headline font-black text-4xl text-on-surface mb-2">Campagnes</h1>
         <p className="text-on-surface-variant text-lg">
           Gérez, modifiez et suivez toutes vos campagnes de marketing
         </p>
@@ -131,7 +122,13 @@ const CampaignListDashboard: FC = () => {
             />
           </div>
           <Link
-            to="/campaigns/new"
+            to="#"
+            onClick={async (e) => {
+              e.preventDefault();
+              await createNewCampaign();
+              navigate('/campaigns/new?fresh=1');
+            }}
+            data-tour="campaigns-new-campaign-button"
             className="px-6 py-3 bg-primary text-on-primary font-bold rounded-xl hover:brightness-110 transition-all active:scale-95 flex items-center gap-2"
           >
             <span className="material-symbols-outlined">add</span>
@@ -221,7 +218,13 @@ const CampaignListDashboard: FC = () => {
               : 'Aucune campagne. Créez votre première campagne!'}
           </p>
           <Link
-            to="/campaigns/new"
+            to="#"
+            onClick={async (e) => {
+              e.preventDefault();
+              await createNewCampaign();
+              navigate('/campaigns/new?fresh=1');
+            }}
+            data-tour="campaigns-create-campaign-button"
             className="mt-6 inline-block px-6 py-3 bg-primary text-on-primary font-bold rounded-lg hover:brightness-110 transition-all"
           >
             Créer une campagne
@@ -244,15 +247,13 @@ const CampaignListDashboard: FC = () => {
                       {campaign.name}
                     </h3>
                     {campaign.description && (
-                      <p className="text-on-surface-variant text-sm mb-3">
-                        {campaign.description}
-                      </p>
+                      <p className="text-on-surface-variant text-sm mb-3">{campaign.description}</p>
                     )}
                     <div className="flex items-center gap-3 flex-wrap">
                       {/* Status Badge */}
                       <span
                         className={`text-xs font-bold px-3 py-1 rounded-full ${getStatusBadgeColor(
-                          campaign.status
+                          campaign.status,
                         )}`}
                       >
                         {campaign.status === 'draft' && 'Brouillon'}

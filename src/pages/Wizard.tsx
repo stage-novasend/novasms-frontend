@@ -1,5 +1,7 @@
 import { useState } from 'react';
+// Note: we avoid importing `Step` type until `react-joyride` is installed
 import { Check, ChevronLeft, ChevronRight, Cloud } from 'lucide-react';
+// OnboardingTour component kept for lightweight fallback; not used here
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -381,11 +383,11 @@ export default function Wizard() {
           <div className="grid lg:grid-cols-12 gap-8">
             <aside className="lg:col-span-4 flex flex-col gap-4">
               <h1 className="text-5xl font-extrabold leading-tight tracking-tighter text-on-surface">
-                L'architecte de votre identité.
+                Votre espace NovaSMS, expliqué pas à pas.
               </h1>
               <p className="text-lg leading-relaxed text-on-surface-variant max-w-sm">
-                Configurez votre espace de travail en 4 étapes pour préparer vos premières campagnes
-                multicanales.
+                Configurez votre compte, puis découvrez à quoi servent le dashboard, les contacts,
+                les campagnes, les statistiques et les automatisations.
               </p>
 
               <div className="mt-6 rounded-2xl border border-outline-variant/20 bg-surface p-5 shadow-sm">
@@ -406,6 +408,22 @@ export default function Wizard() {
                     <Check className="w-4 h-4 text-primary mt-0.5" /> Première campagne
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-outline-variant/20 bg-surface p-5 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant mb-3">
+                  Lancer le parcours réel du site
+                </p>
+                <p className="text-sm text-on-surface-variant mb-4">
+                  Suivez l'import des contacts, la création de segments, puis la création d'une
+                  campagne sur les vrais écrans.
+                </p>
+                <button
+                  onClick={() => navigate('/contacts?tour=1')}
+                  className="w-full px-4 py-3 rounded-xl border border-primary text-primary font-semibold"
+                >
+                  Commencer le parcours guidé
+                </button>
               </div>
             </aside>
 

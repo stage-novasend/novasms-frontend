@@ -2,6 +2,12 @@ import { Bolt } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState } from 'react';
 
+function sanitizeMessage(message?: string | null): string | null {
+  if (!message) return null;
+  // replace email addresses with a generic placeholder to avoid leaking PII
+  return message.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[adresse email]');
+}
+
 export default function ResetPassword() {
   const navigate = useNavigate();
   const { token } = useParams<{ token: string }>();
@@ -37,11 +43,13 @@ export default function ResetPassword() {
       const json = await res.json();
 
       if (!res.ok || !json?.success) {
-        setError(json?.message || 'Impossible d\'envoyer le lien de réinitialisation.');
+        setError(
+          sanitizeMessage(json?.message) || "Impossible d'envoyer le lien de réinitialisation.",
+        );
         return;
       }
 
-      setSuccess(json?.message || 'Si le compte existe, un email sera envoyé.');
+      setSuccess(sanitizeMessage(json?.message) || 'Si le compte existe, un email sera envoyé.');
     } catch {
       setError('Erreur de connexion au serveur.');
     } finally {
@@ -80,7 +88,7 @@ export default function ResetPassword() {
       const json = await res.json();
 
       if (!res.ok || !json?.success) {
-        setError(json?.message || 'Impossible de réinitialiser le mot de passe.');
+        setError(sanitizeMessage(json?.message) || 'Impossible de réinitialiser le mot de passe.');
         return;
       }
 
@@ -110,7 +118,10 @@ export default function ResetPassword() {
             : 'Entrez votre email pour recevoir un lien de réinitialisation.'}
         </p>
 
-        <form onSubmit={hasToken ? submitReset : submitRequestReset} className="space-y-4 text-left">
+        <form
+          onSubmit={hasToken ? submitReset : submitRequestReset}
+          className="space-y-4 text-left"
+        >
           {hasToken ? (
             <>
               <div>
@@ -164,9 +175,7 @@ export default function ResetPassword() {
           )}
 
           {success && (
-            <div className="p-3 bg-primary/10 text-primary rounded-lg text-sm">
-              {success}
-            </div>
+            <div className="p-3 bg-primary/10 text-primary rounded-lg text-sm">{success}</div>
           )}
 
           <button
