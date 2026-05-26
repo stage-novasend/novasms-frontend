@@ -1,5 +1,6 @@
 import type { CSSProperties, FC } from 'react';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { campaignApi } from '@/api/campaignApi';
 import { useCampaignStore } from '@/store/campaign.store';
 import { CONTACT_VARIABLES } from '@/types/campaign.types';
 import type { CampaignBlock } from '@/store/campaign.store';
@@ -27,16 +28,65 @@ export const EmailEditor: FC = () => {
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageUploadRef = useRef<((uploadedImage: UploadedImage) => void) | null>(null);
+  const lastHydratedContentRef = useRef<string>('');
+
+  const fileToDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Impossible de lire le fichier image'));
+      reader.readAsDataURL(file);
+    });
 
   // Get campaign ID from store (used for image uploads)
   const campaignId = selectedCampaignId;
 
-  const handleSave = () => {
-    setDraftEmailContent({
+  useEffect(() => {
+    const nextContent = JSON.stringify(draft.emailContent ?? null);
+    if (nextContent === lastHydratedContentRef.current) return;
+
+    lastHydratedContentRef.current = nextContent;
+    setSubject(draft.emailContent?.subject || '');
+    setPreheader(draft.emailContent?.preheader || '');
+    setBlocks(draft.emailContent?.blocks || []);
+    setSelectedBlockId(null);
+  }, [
+    draft.emailContent,
+    draft.emailContent?.subject,
+    draft.emailContent?.preheader,
+    draft.emailContent?.blocks,
+  ]);
+
+  useEffect(() => {
+    const content = { subject, preheader, blocks };
+    try {
+      lastHydratedContentRef.current = JSON.stringify(content);
+      setDraftEmailContent(content);
+    } catch {
+      // swallow
+    }
+  }, [subject, preheader, blocks, setDraftEmailContent]);
+
+  const handleSave = async () => {
+    const content = {
       subject,
       preheader,
       blocks,
-    });
+    };
+
+    setDraftEmailContent(content);
+
+    // If editing an already-persisted campaign, persist changes to backend
+    if (selectedCampaignId) {
+      try {
+        await campaignApi.update(selectedCampaignId, { emailContent: content });
+      } catch (err) {
+        alert(
+          'Erreur lors de la sauvegarde distante: ' +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+    }
   };
 
   const createBlockByType = (type: CampaignBlock['type']): CampaignBlock => {
@@ -144,6 +194,7 @@ export const EmailEditor: FC = () => {
   const uploadImageFile = async (
     file: File | null,
     onUploaded?: (uploadedImage: UploadedImage) => void,
+    inlineSrc?: string,
   ) => {
     if (!file) return;
 
@@ -160,9 +211,11 @@ export const EmailEditor: FC = () => {
       const realCampaignId = await ensureCampaignIdForUpload();
       const uploadedImage = await imageUploadService.uploadImage(file, realCampaignId);
       setUploadedImages([...uploadedImages, uploadedImage]);
-      onUploaded?.(uploadedImage);
+      onUploaded?.(inlineSrc ? { ...uploadedImage, url: inlineSrc } : uploadedImage);
     } catch (error) {
-      alert('Erreur lors de l\'upload: ' + (error instanceof Error ? error.message : 'Erreur inconnue'));
+      alert(
+        "Erreur lors de l'upload: " + (error instanceof Error ? error.message : 'Erreur inconnue'),
+      );
     } finally {
       setIsUploadingImage(false);
     }
@@ -171,21 +224,26 @@ export const EmailEditor: FC = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     const pendingUpload = pendingImageUploadRef.current;
+    const inlineSrc = file ? await fileToDataUrl(file) : '';
 
-    await uploadImageFile(file, (uploadedImage) => {
-      if (pendingUpload) {
-        pendingUpload(uploadedImage);
-        return;
-      }
+    await uploadImageFile(
+      file,
+      (uploadedImage) => {
+        if (pendingUpload) {
+          pendingUpload(uploadedImage);
+          return;
+        }
 
-      const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
-      if (selectedBlock && selectedBlock.type === 'image') {
-        handleUpdateBlock(selectedBlock.id, {
-          src: uploadedImage.url,
-          alt: uploadedImage.name,
-        });
-      }
-    });
+        const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
+        if (selectedBlock && selectedBlock.type === 'image') {
+          handleUpdateBlock(selectedBlock.id, {
+            src: uploadedImage.url,
+            alt: uploadedImage.name,
+          });
+        }
+      },
+      inlineSrc,
+    );
 
     pendingImageUploadRef.current = null;
 
@@ -227,9 +285,7 @@ export const EmailEditor: FC = () => {
     const fontWeightRaw = content.fontWeight;
     const textAlignRaw = content.textAlign;
     const textAlign: CSSProperties['textAlign'] =
-      textAlignRaw === 'center' ||
-      textAlignRaw === 'right' ||
-      textAlignRaw === 'justify'
+      textAlignRaw === 'center' || textAlignRaw === 'right' || textAlignRaw === 'justify'
         ? textAlignRaw
         : 'left';
 
@@ -244,7 +300,6 @@ export const EmailEditor: FC = () => {
       color: typeof content.color === 'string' ? content.color : '#111827',
     };
   };
-
 
   const getImageAlt = (content: Record<string, unknown>): string => {
     const value = content.alt;
@@ -288,9 +343,7 @@ export const EmailEditor: FC = () => {
     const rawColumns = Array.isArray(content.columns) ? content.columns : [];
     const columns = Array.from({ length: safeLayout }).map((_, index) => {
       const col = rawColumns[index] as Record<string, unknown> | undefined;
-      const blocksInColumn = Array.isArray(col?.blocks)
-        ? (col?.blocks as CampaignBlock[])
-        : [];
+      const blocksInColumn = Array.isArray(col?.blocks) ? (col?.blocks as CampaignBlock[]) : [];
       return { blocks: blocksInColumn };
     });
     return { layout: safeLayout, columns };
@@ -313,7 +366,17 @@ export const EmailEditor: FC = () => {
     });
   };
 
-  const blockTypes: CampaignBlock['type'][] = ['text', 'image', 'button', 'product', 'divider', 'social', 'columns', 'spacing', 'html'];
+  const blockTypes: CampaignBlock['type'][] = [
+    'text',
+    'image',
+    'button',
+    'product',
+    'divider',
+    'social',
+    'columns',
+    'spacing',
+    'html',
+  ];
 
   return (
     <div className="max-w-7xl mx-auto px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -348,9 +411,9 @@ export const EmailEditor: FC = () => {
                         ? 'smart_button'
                         : type === 'product'
                           ? 'shopping_bag'
-                        : type === 'divider'
-                          ? 'horizontal_rule'
-                          : 'share'}
+                          : type === 'divider'
+                            ? 'horizontal_rule'
+                            : 'share'}
                 </span>
                 <span className="text-[11px] font-semibold text-on-surface-variant uppercase tracking-tighter">
                   {type === 'text'
@@ -361,15 +424,15 @@ export const EmailEditor: FC = () => {
                         ? 'Bouton'
                         : type === 'product'
                           ? 'Produit'
-                        : type === 'divider'
-                          ? 'Séparateur'
-                          : type === 'columns'
-                            ? 'Colonnes'
-                            : type === 'spacing'
-                              ? 'Espacement'
-                              : type === 'html'
-                                ? 'HTML'
-                                : 'Social'}
+                          : type === 'divider'
+                            ? 'Séparateur'
+                            : type === 'columns'
+                              ? 'Colonnes'
+                              : type === 'spacing'
+                                ? 'Espacement'
+                                : type === 'html'
+                                  ? 'HTML'
+                                  : 'Social'}
                 </span>
               </button>
             ))}
@@ -450,9 +513,7 @@ export const EmailEditor: FC = () => {
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-bold text-primary uppercase">
-                    {block.type}
-                  </span>
+                  <span className="text-xs font-bold text-primary uppercase">{block.type}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -460,9 +521,7 @@ export const EmailEditor: FC = () => {
                     }}
                     className="opacity-0 group-hover:opacity-100 text-error hover:bg-error/10 p-1 rounded transition-all"
                   >
-                    <span className="material-symbols-outlined text-sm">
-                      delete
-                    </span>
+                    <span className="material-symbols-outlined text-sm">delete</span>
                   </button>
                 </div>
 
@@ -488,67 +547,90 @@ export const EmailEditor: FC = () => {
                     )}
                   </div>
                 )}
-                {block.type === 'button' && (() => {
-                  const buttonUrl = getButtonUrl(block.content);
-                  const buttonLabel = getButtonText(block.content);
-                  const buttonNode = (
-                    <span className="inline-flex px-4 py-2 bg-primary text-on-primary font-bold rounded-lg text-sm">
-                      {buttonLabel}
-                    </span>
-                  );
+                {block.type === 'button' &&
+                  (() => {
+                    const buttonUrl = getButtonUrl(block.content);
+                    const buttonLabel = getButtonText(block.content);
+                    const buttonNode = (
+                      <span className="inline-flex px-4 py-2 bg-primary text-on-primary font-bold rounded-lg text-sm">
+                        {buttonLabel}
+                      </span>
+                    );
 
-                  if (buttonUrl) {
+                    if (buttonUrl) {
+                      return (
+                        <a
+                          href={buttonUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block"
+                        >
+                          {buttonNode}
+                        </a>
+                      );
+                    }
+
                     return (
-                      <a href={buttonUrl} target="_blank" rel="noreferrer" className="inline-block">
+                      <div>
                         {buttonNode}
-                      </a>
-                    );
-                  }
-
-                  return (
-                    <div>
-                      {buttonNode}
-                      <p className="mt-1 text-[11px] text-on-surface-variant">Aucun lien défini</p>
-                    </div>
-                  );
-                })()}
-                {block.type === 'product' && (() => {
-                  const product = block.content as Record<string, unknown>;
-                  const productTitle = typeof product.title === 'string' ? product.title : 'Produit';
-                  const productDescription = typeof product.description === 'string' ? product.description : '';
-                  const productPrice = typeof product.price === 'string' ? product.price : '';
-                  const productUrl = typeof product.url === 'string' ? product.url : '';
-                  const productImage = typeof product.image === 'string' ? product.image : '';
-
-                  const card = (
-                    <div className="rounded-xl border border-outline-variant/20 overflow-hidden bg-surface-container-low">
-                      <div className="h-28 bg-surface-container flex items-center justify-center overflow-hidden">
-                        {productImage ? (
-                          <img src={imageUploadService.getThumbnail(productImage)} alt={productTitle} className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="material-symbols-outlined text-4xl text-on-surface-variant">shopping_bag</span>
-                        )}
+                        <p className="mt-1 text-[11px] text-on-surface-variant">
+                          Aucun lien défini
+                        </p>
                       </div>
-                      <div className="p-3 space-y-1 text-left">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-bold text-on-surface">{productTitle}</p>
-                          {productPrice && <span className="text-xs font-bold text-primary">{productPrice}</span>}
+                    );
+                  })()}
+                {block.type === 'product' &&
+                  (() => {
+                    const product = block.content as Record<string, unknown>;
+                    const productTitle =
+                      typeof product.title === 'string' ? product.title : 'Produit';
+                    const productDescription =
+                      typeof product.description === 'string' ? product.description : '';
+                    const productPrice = typeof product.price === 'string' ? product.price : '';
+                    const productUrl = typeof product.url === 'string' ? product.url : '';
+                    const productImage = typeof product.image === 'string' ? product.image : '';
+
+                    const card = (
+                      <div className="rounded-xl border border-outline-variant/20 overflow-hidden bg-surface-container-low">
+                        <div className="h-28 bg-surface-container flex items-center justify-center overflow-hidden">
+                          {productImage ? (
+                            <img
+                              src={imageUploadService.getThumbnail(productImage)}
+                              alt={productTitle}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="material-symbols-outlined text-4xl text-on-surface-variant">
+                              shopping_bag
+                            </span>
+                          )}
                         </div>
-                        {productDescription && <p className="text-[11px] text-on-surface-variant line-clamp-2">{productDescription}</p>}
+                        <div className="p-3 space-y-1 text-left">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-bold text-on-surface">{productTitle}</p>
+                            {productPrice && (
+                              <span className="text-xs font-bold text-primary">{productPrice}</span>
+                            )}
+                          </div>
+                          {productDescription && (
+                            <p className="text-[11px] text-on-surface-variant line-clamp-2">
+                              {productDescription}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-
-                  if (productUrl) {
-                    return (
-                      <a href={productUrl} target="_blank" rel="noreferrer" className="block">
-                        {card}
-                      </a>
                     );
-                  }
 
-                  return card;
-                })()}
+                    if (productUrl) {
+                      return (
+                        <a href={productUrl} target="_blank" rel="noreferrer" className="block">
+                          {card}
+                        </a>
+                      );
+                    }
+
+                    return card;
+                  })()}
                 {block.type === 'divider' && (
                   <div className="mx-auto" style={getDividerStyle(block.content)} />
                 )}
@@ -559,24 +641,28 @@ export const EmailEditor: FC = () => {
                       { id: 'instagram', icon: '📷', color: '#E4405F' },
                       { id: 'tiktok', icon: '♪', color: '#000000' },
                       { id: 'linkedin', icon: '🔗', color: '#0A66C2' },
-                    ].map((network) => {
-                      const url = ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
-                      // Ne pas afficher si l'URL est vide
-                      if (!url) return null;
-                      return (
-                        <a
-                          key={network.id}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
-                          style={{ backgroundColor: network.color }}
-                          title={network.id}
-                        >
-                          {network.icon}
-                        </a>
-                      );
-                    }).filter(Boolean)}
+                    ]
+                      .map((network) => {
+                        const url =
+                          ((block.content as Record<string, unknown>)?.[network.id] as string) ||
+                          '';
+                        // Ne pas afficher si l'URL est vide
+                        if (!url) return null;
+                        return (
+                          <a
+                            key={network.id}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
+                            style={{ backgroundColor: network.color }}
+                            title={network.id}
+                          >
+                            {network.icon}
+                          </a>
+                        );
+                      })
+                      .filter(Boolean)}
                   </div>
                 )}
                 {block.type === 'columns' && (
@@ -605,9 +691,9 @@ export const EmailEditor: FC = () => {
                                   className="rounded bg-primary/5 px-2 py-1 text-[10px] text-on-surface"
                                 >
                                   {nested.type === 'text'
-                                    ? ((nested.content.text as string) || 'Texte')
+                                    ? (nested.content.text as string) || 'Texte'
                                     : nested.type === 'button'
-                                      ? ((nested.content.text as string) || 'Bouton')
+                                      ? (nested.content.text as string) || 'Bouton'
                                       : nested.type === 'image'
                                         ? 'Image'
                                         : nested.type === 'spacing'
@@ -629,7 +715,11 @@ export const EmailEditor: FC = () => {
                 {block.type === 'spacing' && (
                   <div
                     className="w-full rounded bg-primary/10"
-                    style={{ height: getSpacingHeight((block.content as Record<string, unknown>)?.size as string | undefined) }}
+                    style={{
+                      height: getSpacingHeight(
+                        (block.content as Record<string, unknown>)?.size as string | undefined,
+                      ),
+                    }}
                     title={`Espacement ${String((block.content as Record<string, unknown>)?.size || 'medium')}`}
                   >
                     <span className="sr-only">Espacement</span>
@@ -686,7 +776,9 @@ export const EmailEditor: FC = () => {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-semibold text-on-surface-variant">Taille</label>
+                        <label className="text-xs font-semibold text-on-surface-variant">
+                          Taille
+                        </label>
                         <input
                           type="number"
                           min={10}
@@ -702,7 +794,9 @@ export const EmailEditor: FC = () => {
                         />
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-on-surface-variant">Graisse</label>
+                        <label className="text-xs font-semibold text-on-surface-variant">
+                          Graisse
+                        </label>
                         <select
                           value={Number(currentStyle.fontWeight)}
                           onChange={(e) =>
@@ -723,7 +817,9 @@ export const EmailEditor: FC = () => {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-xs font-semibold text-on-surface-variant">Police</label>
+                        <label className="text-xs font-semibold text-on-surface-variant">
+                          Police
+                        </label>
                         <select
                           value={String(currentStyle.fontFamily)}
                           onChange={(e) =>
@@ -740,7 +836,9 @@ export const EmailEditor: FC = () => {
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-on-surface-variant">Alignement</label>
+                        <label className="text-xs font-semibold text-on-surface-variant">
+                          Alignement
+                        </label>
                         <select
                           value={String(currentStyle.textAlign)}
                           onChange={(e) =>
@@ -760,7 +858,9 @@ export const EmailEditor: FC = () => {
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-on-surface-variant">Couleur du texte</label>
+                      <label className="text-xs font-semibold text-on-surface-variant">
+                        Couleur du texte
+                      </label>
                       <input
                         type="color"
                         value={String(currentStyle.color)}
@@ -808,7 +908,9 @@ export const EmailEditor: FC = () => {
                       )}
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-on-surface-variant">Alt Text</label>
+                      <label className="text-xs font-semibold text-on-surface-variant">
+                        Alt Text
+                      </label>
                       <input
                         type="text"
                         value={getImageAlt(block.content)}
@@ -828,7 +930,9 @@ export const EmailEditor: FC = () => {
                 return (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-sm font-semibold text-on-surface">Texte du bouton</label>
+                      <label className="text-sm font-semibold text-on-surface">
+                        Texte du bouton
+                      </label>
                       <input
                         type="text"
                         value={getContentText(block.content)}
@@ -860,36 +964,36 @@ export const EmailEditor: FC = () => {
                 );
               } else if (block.type === 'social') {
                 const socialNetworks = [
-                  { 
-                    id: 'facebook', 
-                    name: 'Facebook', 
+                  {
+                    id: 'facebook',
+                    name: 'Facebook',
                     url: 'https://facebook.com',
                     icon: '🔵 f',
-                    color: '#1877F2'
+                    color: '#1877F2',
                   },
-                  { 
-                    id: 'instagram', 
-                    name: 'Instagram', 
+                  {
+                    id: 'instagram',
+                    name: 'Instagram',
                     url: 'https://instagram.com',
                     icon: '🎨 📷',
-                    color: '#E4405F'
+                    color: '#E4405F',
                   },
-                  { 
-                    id: 'tiktok', 
-                    name: 'TikTok', 
+                  {
+                    id: 'tiktok',
+                    name: 'TikTok',
                     url: 'https://tiktok.com',
                     icon: '🎵 ♪',
-                    color: '#000000'
+                    color: '#000000',
                   },
-                  { 
-                    id: 'linkedin', 
-                    name: 'LinkedIn', 
+                  {
+                    id: 'linkedin',
+                    name: 'LinkedIn',
                     url: 'https://linkedin.com',
                     icon: '🔗 in',
-                    color: '#0A66C2'
+                    color: '#0A66C2',
                   },
                 ];
-                
+
                 return (
                   <div className="space-y-4">
                     <p className="text-xs text-on-surface-variant font-semibold uppercase tracking-widest">
@@ -899,11 +1003,17 @@ export const EmailEditor: FC = () => {
                       Activez les réseaux à afficher et entrez vos URLs
                     </p>
                     {socialNetworks.map((network) => {
-                      const isEnabled = Boolean(((block.content as Record<string, unknown>)?.[network.id] as string));
-                      const url = ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
-                      
+                      const isEnabled = Boolean(
+                        (block.content as Record<string, unknown>)?.[network.id] as string,
+                      );
+                      const url =
+                        ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
+
                       return (
-                        <div key={network.id} className="border border-outline-variant/30 rounded-lg p-3">
+                        <div
+                          key={network.id}
+                          className="border border-outline-variant/30 rounded-lg p-3"
+                        >
                           <div className="flex items-center gap-3 mb-2">
                             <input
                               type="checkbox"
@@ -911,12 +1021,14 @@ export const EmailEditor: FC = () => {
                               onChange={(e) => {
                                 handleUpdateBlock(block.id, {
                                   ...block.content,
-                                  [network.id]: e.target.checked ? `https://${network.id}.com/votre-profil` : '',
+                                  [network.id]: e.target.checked
+                                    ? `https://${network.id}.com/votre-profil`
+                                    : '',
                                 });
                               }}
                               className="w-5 h-5 rounded border-outline-variant cursor-pointer"
                             />
-                            <div 
+                            <div
                               className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
                               style={{ backgroundColor: network.color }}
                               title={network.name}
@@ -948,7 +1060,14 @@ export const EmailEditor: FC = () => {
                 );
               } else if (block.type === 'columns') {
                 const currentColumnsState = getColumnsState(block.content);
-                const nestedTypes: CampaignBlock['type'][] = ['text', 'image', 'button', 'divider', 'spacing', 'html'];
+                const nestedTypes: CampaignBlock['type'][] = [
+                  'text',
+                  'image',
+                  'button',
+                  'divider',
+                  'spacing',
+                  'html',
+                ];
                 return (
                   <div className="space-y-4">
                     <label className="text-sm font-semibold text-on-surface">
@@ -961,7 +1080,9 @@ export const EmailEditor: FC = () => {
                           onClick={() => {
                             const colCount = parseInt(num);
                             updateColumnsContent(block.id, (state) => {
-                              const nextColumns = Array.from({ length: colCount }).map((_, index) => state.columns[index] || { blocks: [] });
+                              const nextColumns = Array.from({ length: colCount }).map(
+                                (_, index) => state.columns[index] || { blocks: [] },
+                              );
                               return { layout: colCount, columns: nextColumns };
                             });
                           }}
@@ -981,7 +1102,10 @@ export const EmailEditor: FC = () => {
 
                     <div className="space-y-3">
                       {currentColumnsState.columns.map((column, columnIndex) => (
-                        <div key={columnIndex} className="rounded-lg border border-outline-variant/30 p-3 space-y-3">
+                        <div
+                          key={columnIndex}
+                          className="rounded-lg border border-outline-variant/30 p-3 space-y-3"
+                        >
                           <div className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
                             Colonne {columnIndex + 1}
                           </div>
@@ -1012,15 +1136,22 @@ export const EmailEditor: FC = () => {
                           ) : (
                             <div className="space-y-2">
                               {column.blocks.map((nestedBlock, nestedIndex) => (
-                                <div key={nestedBlock.id} className="rounded-md border border-outline-variant/20 p-2 space-y-2">
+                                <div
+                                  key={nestedBlock.id}
+                                  className="rounded-md border border-outline-variant/20 p-2 space-y-2"
+                                >
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold uppercase text-primary">{nestedBlock.type}</span>
+                                    <span className="text-xs font-semibold uppercase text-primary">
+                                      {nestedBlock.type}
+                                    </span>
                                     <button
                                       onClick={() => {
                                         updateColumnsContent(block.id, (state) => {
                                           const nextColumns = [...state.columns];
                                           const target = nextColumns[columnIndex] || { blocks: [] };
-                                          target.blocks = target.blocks.filter((b) => b.id !== nestedBlock.id);
+                                          target.blocks = target.blocks.filter(
+                                            (b) => b.id !== nestedBlock.id,
+                                          );
                                           nextColumns[columnIndex] = target;
                                           return { layout: state.layout, columns: nextColumns };
                                         });
@@ -1064,7 +1195,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1088,7 +1221,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1113,11 +1248,16 @@ export const EmailEditor: FC = () => {
                                       <button
                                         onClick={() =>
                                           triggerImageUpload((uploadedImage) => {
-                                            updateNestedColumnBlock(block.id, columnIndex, nestedIndex, {
-                                              ...nestedBlock.content,
-                                              src: uploadedImage.url,
-                                              alt: uploadedImage.name,
-                                            });
+                                            updateNestedColumnBlock(
+                                              block.id,
+                                              columnIndex,
+                                              nestedIndex,
+                                              {
+                                                ...nestedBlock.content,
+                                                src: uploadedImage.url,
+                                                alt: uploadedImage.name,
+                                              },
+                                            );
                                           })
                                         }
                                         disabled={isUploadingImage}
@@ -1129,10 +1269,15 @@ export const EmailEditor: FC = () => {
                                         type="url"
                                         value={(nestedBlock.content.src as string) || ''}
                                         onChange={(e) => {
-                                          updateNestedColumnBlock(block.id, columnIndex, nestedIndex, {
-                                            ...nestedBlock.content,
-                                            src: e.target.value,
-                                          });
+                                          updateNestedColumnBlock(
+                                            block.id,
+                                            columnIndex,
+                                            nestedIndex,
+                                            {
+                                              ...nestedBlock.content,
+                                              src: e.target.value,
+                                            },
+                                          );
                                         }}
                                         className="w-full bg-surface-container-lowest ring-1 ring-outline-variant rounded px-2 py-1 text-xs"
                                         placeholder="URL d'image (https://...)"
@@ -1143,45 +1288,75 @@ export const EmailEditor: FC = () => {
                                   {nestedBlock.type === 'divider' && (
                                     <div className="space-y-2">
                                       <div className="flex items-center gap-2">
-                                        <label className="text-[11px] font-semibold text-on-surface-variant">Épaisseur</label>
+                                        <label className="text-[11px] font-semibold text-on-surface-variant">
+                                          Épaisseur
+                                        </label>
                                         <input
                                           type="range"
                                           min={1}
                                           max={8}
-                                          value={Number((nestedBlock.content as Record<string, unknown>).thickness || 2)}
+                                          value={Number(
+                                            (nestedBlock.content as Record<string, unknown>)
+                                              .thickness || 2,
+                                          )}
                                           onChange={(e) => {
-                                            updateNestedColumnBlock(block.id, columnIndex, nestedIndex, {
-                                              ...nestedBlock.content,
-                                              thickness: Number(e.target.value),
-                                            });
+                                            updateNestedColumnBlock(
+                                              block.id,
+                                              columnIndex,
+                                              nestedIndex,
+                                              {
+                                                ...nestedBlock.content,
+                                                thickness: Number(e.target.value),
+                                              },
+                                            );
                                           }}
                                           className="flex-1"
                                         />
                                       </div>
                                       <div className="grid grid-cols-2 gap-2">
                                         <div>
-                                          <label className="text-[11px] font-semibold text-on-surface-variant">Couleur</label>
+                                          <label className="text-[11px] font-semibold text-on-surface-variant">
+                                            Couleur
+                                          </label>
                                           <input
                                             type="color"
-                                            value={(nestedBlock.content as Record<string, unknown>).color as string || '#d1d5db'}
+                                            value={
+                                              ((nestedBlock.content as Record<string, unknown>)
+                                                .color as string) || '#d1d5db'
+                                            }
                                             onChange={(e) => {
-                                              updateNestedColumnBlock(block.id, columnIndex, nestedIndex, {
-                                                ...nestedBlock.content,
-                                                color: e.target.value,
-                                              });
+                                              updateNestedColumnBlock(
+                                                block.id,
+                                                columnIndex,
+                                                nestedIndex,
+                                                {
+                                                  ...nestedBlock.content,
+                                                  color: e.target.value,
+                                                },
+                                              );
                                             }}
                                             className="mt-1 h-9 w-full rounded border border-outline-variant bg-transparent"
                                           />
                                         </div>
                                         <div>
-                                          <label className="text-[11px] font-semibold text-on-surface-variant">Largeur</label>
+                                          <label className="text-[11px] font-semibold text-on-surface-variant">
+                                            Largeur
+                                          </label>
                                           <select
-                                            value={(nestedBlock.content as Record<string, unknown>).width as string || '100%'}
+                                            value={
+                                              ((nestedBlock.content as Record<string, unknown>)
+                                                .width as string) || '100%'
+                                            }
                                             onChange={(e) => {
-                                              updateNestedColumnBlock(block.id, columnIndex, nestedIndex, {
-                                                ...nestedBlock.content,
-                                                width: e.target.value,
-                                              });
+                                              updateNestedColumnBlock(
+                                                block.id,
+                                                columnIndex,
+                                                nestedIndex,
+                                                {
+                                                  ...nestedBlock.content,
+                                                  width: e.target.value,
+                                                },
+                                              );
                                             }}
                                             className="mt-1 w-full bg-surface-container-lowest ring-1 ring-outline-variant rounded px-2 py-1 text-xs"
                                           >
@@ -1195,7 +1370,9 @@ export const EmailEditor: FC = () => {
                                       <div className="pt-1">
                                         <div
                                           className="mx-auto"
-                                          style={getDividerStyle(nestedBlock.content as Record<string, unknown>)}
+                                          style={getDividerStyle(
+                                            nestedBlock.content as Record<string, unknown>,
+                                          )}
                                         />
                                       </div>
                                     </div>
@@ -1203,14 +1380,24 @@ export const EmailEditor: FC = () => {
 
                                   {nestedBlock.type === 'html' && (
                                     <div className="space-y-2">
-                                      <label className="text-[11px] font-semibold text-on-surface-variant">Code HTML</label>
+                                      <label className="text-[11px] font-semibold text-on-surface-variant">
+                                        Code HTML
+                                      </label>
                                       <textarea
-                                        value={(nestedBlock.content as Record<string, unknown>)?.html as string || ''}
+                                        value={
+                                          ((nestedBlock.content as Record<string, unknown>)
+                                            ?.html as string) || ''
+                                        }
                                         onChange={(e) => {
-                                          updateNestedColumnBlock(block.id, columnIndex, nestedIndex, {
-                                            ...nestedBlock.content,
-                                            html: e.target.value,
-                                          });
+                                          updateNestedColumnBlock(
+                                            block.id,
+                                            columnIndex,
+                                            nestedIndex,
+                                            {
+                                              ...nestedBlock.content,
+                                              html: e.target.value,
+                                            },
+                                          );
                                         }}
                                         rows={4}
                                         placeholder="<div><strong>Bonjour</strong></div>"
@@ -1220,7 +1407,8 @@ export const EmailEditor: FC = () => {
                                         <div
                                           dangerouslySetInnerHTML={{
                                             __html:
-                                              ((nestedBlock.content as Record<string, unknown>)?.html as string) ||
+                                              ((nestedBlock.content as Record<string, unknown>)
+                                                ?.html as string) ||
                                               '<p style="color:#9ca3af">HTML vide</p>',
                                           }}
                                         />
@@ -1236,7 +1424,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1260,7 +1450,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1284,7 +1476,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1308,7 +1502,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1332,7 +1528,9 @@ export const EmailEditor: FC = () => {
                                         onChange={(e) => {
                                           updateColumnsContent(block.id, (state) => {
                                             const nextColumns = [...state.columns];
-                                            const target = nextColumns[columnIndex] || { blocks: [] };
+                                            const target = nextColumns[columnIndex] || {
+                                              blocks: [],
+                                            };
                                             const nextBlocks = [...target.blocks];
                                             nextBlocks[nestedIndex] = {
                                               ...nestedBlock,
@@ -1395,7 +1593,7 @@ export const EmailEditor: FC = () => {
                       Code HTML personnalisé
                     </label>
                     <textarea
-                      value={(block.content as Record<string, unknown>)?.html as string || ''}
+                      value={((block.content as Record<string, unknown>)?.html as string) || ''}
                       onChange={(e) => {
                         handleUpdateBlock(block.id, { html: e.target.value });
                       }}
@@ -1404,11 +1602,15 @@ export const EmailEditor: FC = () => {
                       className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-lg px-3 py-2 font-mono text-xs text-on-surface"
                     />
                     <div className="p-3 bg-surface-container-low rounded-lg">
-                      <p className="text-xs text-on-surface-variant font-semibold mb-2">Aperçu HTML:</p>
-                      <div 
+                      <p className="text-xs text-on-surface-variant font-semibold mb-2">
+                        Aperçu HTML:
+                      </p>
+                      <div
                         className="bg-white rounded text-xs text-on-surface max-h-32 overflow-auto"
                         dangerouslySetInnerHTML={{
-                          __html: (((block.content as Record<string, unknown>)?.html as string) || '<p style="color: #999;">Pas de contenu</p>'),
+                          __html:
+                            ((block.content as Record<string, unknown>)?.html as string) ||
+                            '<p style="color: #999;">Pas de contenu</p>',
                         }}
                       />
                     </div>
@@ -1431,7 +1633,9 @@ export const EmailEditor: FC = () => {
                     <input
                       type="text"
                       value={currentTitle}
-                      onChange={(e) => handleUpdateBlock(block.id, { ...product, title: e.target.value })}
+                      onChange={(e) =>
+                        handleUpdateBlock(block.id, { ...product, title: e.target.value })
+                      }
                       placeholder="Titre du produit"
                       className="w-full bg-surface-container-lowest ring-1 ring-outline-variant rounded px-3 py-2"
                     />
@@ -1439,21 +1643,27 @@ export const EmailEditor: FC = () => {
                     <input
                       type="text"
                       value={currentPrice}
-                      onChange={(e) => handleUpdateBlock(block.id, { ...product, price: e.target.value })}
+                      onChange={(e) =>
+                        handleUpdateBlock(block.id, { ...product, price: e.target.value })
+                      }
                       placeholder="Prix"
                       className="w-full bg-surface-container-lowest ring-1 ring-outline-variant rounded px-3 py-2"
                     />
 
                     <textarea
                       value={currentDescription}
-                      onChange={(e) => handleUpdateBlock(block.id, { ...product, description: e.target.value })}
+                      onChange={(e) =>
+                        handleUpdateBlock(block.id, { ...product, description: e.target.value })
+                      }
                       rows={3}
                       placeholder="Description"
                       className="w-full bg-surface-container-lowest ring-1 ring-outline-variant rounded px-3 py-2"
                     />
 
                     <div className="space-y-2">
-                      <label className="text-xs font-semibold text-on-surface-variant">Image du produit</label>
+                      <label className="text-xs font-semibold text-on-surface-variant">
+                        Image du produit
+                      </label>
                       <div className="flex gap-2">
                         <button
                           onClick={() =>
@@ -1470,17 +1680,25 @@ export const EmailEditor: FC = () => {
 
                       {currentImage && (
                         <div className="p-2 bg-surface-container rounded">
-                          <img src={imageUploadService.getThumbnail(currentImage)} alt={currentTitle || 'product'} className="w-full h-24 object-cover rounded" />
+                          <img
+                            src={imageUploadService.getThumbnail(currentImage)}
+                            alt={currentTitle || 'product'}
+                            className="w-full h-24 object-cover rounded"
+                          />
                         </div>
                       )}
                     </div>
 
                     <div>
-                      <label className="text-xs font-semibold text-on-surface-variant">Lien du produit</label>
+                      <label className="text-xs font-semibold text-on-surface-variant">
+                        Lien du produit
+                      </label>
                       <input
                         type="url"
                         value={currentUrl}
-                        onChange={(e) => handleUpdateBlock(block.id, { ...product, url: e.target.value })}
+                        onChange={(e) =>
+                          handleUpdateBlock(block.id, { ...product, url: e.target.value })
+                        }
                         placeholder="https://..."
                         className="w-full bg-surface-container-lowest ring-1 ring-outline-variant rounded px-3 py-2"
                       />

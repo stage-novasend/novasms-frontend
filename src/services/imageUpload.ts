@@ -35,15 +35,11 @@ class ImageUploadService {
     formData.append('file', file);
 
     try {
-      const response = await api.post(
-        `/campaigns/${campaignId}/images/upload`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+      const response = await api.post(`/campaigns/${campaignId}/images/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
         },
-      );
+      });
 
       const data = response.data;
       console.log('✅ Image uploaded:', data);
@@ -104,6 +100,10 @@ class ImageUploadService {
 
   resolveImageUrl(imageUrl: string): string {
     if (!imageUrl) return imageUrl;
+    if (/^data:/i.test(imageUrl)) {
+      console.debug('[ImageUpload] data url kept as-is', { imageUrl });
+      return imageUrl;
+    }
     if (/^https?:\/\//i.test(imageUrl)) {
       console.debug('[ImageUpload] absolute url kept as-is', { imageUrl });
       return imageUrl;
@@ -126,7 +126,7 @@ class ImageUploadService {
     }
 
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return { valid: false, error: 'Type d\'image non supporté (JPEG, PNG, GIF, WebP)' };
+      return { valid: false, error: "Type d'image non supporté (JPEG, PNG, GIF, WebP)" };
     }
 
     return { valid: true };

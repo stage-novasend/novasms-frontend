@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useCampaignStore } from '@/store/campaign.store';
@@ -13,13 +13,8 @@ interface CampaignScheduleStepProps {
 
 export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) => {
   const navigate = useNavigate();
-  const {
-    draft,
-    setDraftSchedule,
-    setDraftABTest,
-    clearDraft,
-    selectedCampaignId,
-  } = useCampaignStore();
+  const { draft, setDraftSchedule, setDraftABTest, clearDraft, selectedCampaignId } =
+    useCampaignStore();
 
   const [scheduleType, setScheduleType] = useState<'immediate' | 'scheduled'>(
     draft.schedule?.type === 'scheduled' ? 'scheduled' : 'immediate',
@@ -40,8 +35,33 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
   const [promoCode, setPromoCode] = useState(draft.promoCode || '');
   const [isSaving, setIsSaving] = useState(false);
 
-  const buildEmailTextContent = () => {
-    const blocks = draft.emailContent?.blocks || [];
+  useEffect(() => {
+    setScheduleType(draft.schedule?.type === 'scheduled' ? 'scheduled' : 'immediate');
+    setScheduledDate(
+      draft.schedule?.scheduledAt
+        ? new Date(draft.schedule.scheduledAt).toISOString().split('T')[0]
+        : '',
+    );
+    setScheduledTime(
+      draft.schedule?.scheduledAt
+        ? new Date(draft.schedule.scheduledAt).toTimeString().slice(0, 5)
+        : '10:00',
+    );
+    setTimezone(draft.schedule?.timezone || 'Africa/Abidjan');
+    setAbEnabled(draft.abTest?.enabled || false);
+    setSplitRatio(draft.abTest?.splitRatio || 20);
+    setPromoCode(draft.promoCode || '');
+  }, [
+    draft.schedule?.scheduledAt,
+    draft.schedule?.timezone,
+    draft.schedule?.type,
+    draft.abTest?.enabled,
+    draft.abTest?.splitRatio,
+    draft.promoCode,
+  ]);
+
+  const buildEmailTextContent = (emailContent = draft.emailContent) => {
+    const blocks = emailContent?.blocks || [];
     return blocks
       .map((block) => {
         if (block.type === 'text' && typeof block.content.text === 'string') {
@@ -55,6 +75,16 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       .filter(Boolean)
       .join('\n\n')
       .trim();
+  };
+
+  const buildEmailContentPayload = (emailContent = draft.emailContent, channel = draft.channel) => {
+    if (channel !== 'EMAIL') return undefined;
+
+    return {
+      subject: emailContent?.subject || '',
+      preheader: emailContent?.preheader || '',
+      blocks: emailContent?.blocks || [],
+    };
   };
 
   const handleScheduleChange = () => {
@@ -89,13 +119,14 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
 
     try {
       console.log('💾 Saving draft from schedule step...');
+      const latestDraft = useCampaignStore.getState().draft;
 
       let campaignId = selectedCampaignId;
       if (!campaignId) {
         console.log('📝 Creating minimal campaign draft...');
         const createRes = await api.post<{ id: string }>('/campaigns', {
-          channelType: draft.channel,
-          name: draft.name,
+          channelType: latestDraft.channel,
+          name: latestDraft.name,
           status: 'DRAFT',
         });
         campaignId = createRes.data.id;
@@ -103,20 +134,28 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         console.log('✅ Campaign draft created with ID:', campaignId);
       }
 
-      const subject = draft.channel === 'EMAIL' ? draft.emailContent?.subject : undefined;
+      const subject =
+        latestDraft.channel === 'EMAIL' ? latestDraft.emailContent?.subject : undefined;
       const content =
-        draft.channel === 'SMS'
-          ? draft.smsContent?.message
-          : buildEmailTextContent();
+        latestDraft.channel === 'SMS'
+          ? latestDraft.smsContent?.message
+          : buildEmailTextContent(latestDraft.emailContent);
 
       const draftData: Record<string, unknown> = {
-        name: draft.name,
+        name: latestDraft.name,
         timezone,
       };
       if (subject) draftData.subject = subject;
       if (content) draftData.content = content;
-      if (draft.emailContent?.blocks) draftData.contentJson = draft.emailContent.blocks;
-      if (draft.segmentId) draftData.segmentId = draft.segmentId;
+      const emailContentPayload = buildEmailContentPayload(
+        latestDraft.emailContent,
+        latestDraft.channel,
+      );
+      if (emailContentPayload) {
+        draftData.emailContent = emailContentPayload;
+        draftData.contentJson = emailContentPayload;
+      }
+      if (latestDraft.segmentId) draftData.segmentId = latestDraft.segmentId;
       if (promoCode) draftData.promoCode = promoCode;
 
       const result = await saveCampaignDraft(campaignId, draftData);
@@ -138,16 +177,18 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
 
   // 📌 Envoyer ou programmer
   const handleSendCampaign = async () => {
-    if (!draft.segmentId) {
+    const latestDraft = useCampaignStore.getState().draft;
+
+    if (!latestDraft.segmentId) {
       toast.error("Veuillez sélectionner un segment d'audience");
       return;
     }
 
-    const subject = draft.channel === 'EMAIL' ? draft.emailContent?.subject : undefined;
+    const subject = latestDraft.channel === 'EMAIL' ? latestDraft.emailContent?.subject : undefined;
     const content =
-      draft.channel === 'SMS'
-        ? draft.smsContent?.message
-        : buildEmailTextContent();
+      latestDraft.channel === 'SMS'
+        ? latestDraft.smsContent?.message
+        : buildEmailTextContent(latestDraft.emailContent);
 
     if (!subject && !content) {
       toast.error('Veuillez ajouter du contenu à votre campagne');
@@ -165,14 +206,14 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       if (!campaignId) {
         console.log('📝 Creating campaign first to get ID...');
         const createRes = await api.post<{ id: string }>('/campaigns', {
-          channelType: draft.channel,
-          name: draft.name,
-          segmentId: draft.segmentId,
+          channelType: latestDraft.channel,
+          name: latestDraft.name,
+          segmentId: latestDraft.segmentId,
           promoCode: promoCode || undefined,
           subject,
           content,
-          estimatedRecipients: draft.estimatedRecipients || 0,
-          estimatedCost: draft.estimatedCost || 0,
+          estimatedRecipients: latestDraft.estimatedRecipients || 0,
+          estimatedCost: latestDraft.estimatedCost || 0,
           status: 'DRAFT',
         });
         campaignId = createRes.data.id;
@@ -181,15 +222,22 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       }
 
       const draftData: Record<string, unknown> = {
-        name: draft.name,
-        segmentId: draft.segmentId,
+        name: latestDraft.name,
+        segmentId: latestDraft.segmentId,
         timezone,
-        estimatedRecipients: draft.estimatedRecipients || 0,
-        estimatedCost: draft.estimatedCost || 0,
+        estimatedRecipients: latestDraft.estimatedRecipients || 0,
+        estimatedCost: latestDraft.estimatedCost || 0,
       };
       if (subject) draftData.subject = subject;
       if (content) draftData.content = content;
-      if (draft.emailContent?.blocks) draftData.contentJson = draft.emailContent.blocks;
+      const emailContentPayload = buildEmailContentPayload(
+        latestDraft.emailContent,
+        latestDraft.channel,
+      );
+      if (emailContentPayload) {
+        draftData.emailContent = emailContentPayload;
+        draftData.contentJson = emailContentPayload;
+      }
       if (promoCode) draftData.promoCode = promoCode;
       await saveCampaignDraft(campaignId, draftData);
 
@@ -383,7 +431,9 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
                 className="w-full px-4 py-2 border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition"
               />
               <p className="text-xs text-on-surface-variant">
-                Variable {"{"}{"{"} promoCode {"}"}{"}"}  sera remplacée par cette valeur dans les messages
+                Variable {'{'}
+                {'{'} promoCode {'}'}
+                {'}'} sera remplacée par cette valeur dans les messages
               </p>
             </div>
 
