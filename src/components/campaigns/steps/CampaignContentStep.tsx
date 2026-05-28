@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCampaignStore } from '@/store/campaign.store';
 import { EmailEditor } from '../editors/EmailEditor';
 import { SMSEditor } from '../editors/SMSEditor';
@@ -23,6 +23,10 @@ export const CampaignContentStep: FC<CampaignContentStepProps> = ({
 }) => {
   const { draft, setDraftEmailContent } = useCampaignStore();
   const [showTemplates, setShowTemplates] = useState(!draft.emailContent?.subject); // Show templates si pas de contenu
+
+  useEffect(() => {
+    setShowTemplates(draft.channel === 'EMAIL' && !draft.emailContent?.subject);
+  }, [draft.channel, draft.emailContent?.subject]);
 
   const handleTemplateSelect = (template: EmailTemplate) => {
     setDraftEmailContent(template.content);
