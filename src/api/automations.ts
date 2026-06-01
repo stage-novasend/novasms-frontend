@@ -1,0 +1,100 @@
+import api from './axios';
+
+export type AutomationTrigger = 'contact_added' | 'api';
+export type AutomationChannel = 'Email' | 'SMS' | 'WhatsApp';
+export type AutomationStatus = 'Active' | 'Inactive' | 'Draft';
+
+export type WorkflowNodeType = 'trigger' | 'wait' | 'action' | 'end' | 'condition' | 'tag';
+
+export type WorkflowNodeConfig = {
+  delaySeconds?: number;
+  delayPreset?: '0' | '300' | '1800' | '3600' | '86400' | 'custom';
+  tag?: string;
+  triggerSource?: AutomationTrigger;
+  conditionType?: 'open' | 'click' | 'purchase' | 'tag' | 'field';
+  campaignId?: string;
+  field?: string;
+  operator?: 'exists' | 'equals' | 'notEquals' | 'contains';
+  value?: string;
+  channel?: AutomationChannel;
+  templateId?: string;
+};
+
+export type WorkflowNode = {
+  id: string;
+  x: number;
+  y: number;
+  label: string;
+  type: WorkflowNodeType;
+  config?: WorkflowNodeConfig;
+};
+
+export type WorkflowEdge = {
+  id: string;
+  from: string;
+  to: string;
+  fromPort?: string;
+  toPort?: string;
+};
+
+export type AutomationWorkflow = {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+};
+
+export type AutomationItem = {
+  id: string;
+  accountId: string;
+  name: string;
+  trigger: AutomationTrigger;
+  delaySeconds: number;
+  channel: AutomationChannel;
+  templateId: string | null;
+  status: AutomationStatus;
+  sendCount: number;
+  workflow?: AutomationWorkflow | null;
+  createdAt?: string;
+  updatedAt?: string;
+  _count?: {
+    executions?: number;
+  };
+};
+
+export type AutomationCreateInput = {
+  name: string;
+  trigger: AutomationTrigger;
+  delaySeconds: number;
+  channel: AutomationChannel;
+  templateId?: string | null;
+  status?: AutomationStatus;
+};
+
+export const automationsApi = {
+  list: async (): Promise<AutomationItem[]> => {
+    const response = await api.get<{ data: AutomationItem[] }>('/automations');
+    return response.data.data;
+  },
+
+  create: async (payload: AutomationCreateInput): Promise<AutomationItem> => {
+    const response = await api.post<AutomationItem>('/automations', payload);
+    return response.data;
+  },
+
+  toggle: async (id: string): Promise<AutomationItem> => {
+    const response = await api.patch<AutomationItem>(`/automations/${id}/toggle`);
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    payload: Partial<AutomationCreateInput> & { workflow?: AutomationWorkflow | null },
+  ): Promise<AutomationItem> => {
+    const response = await api.patch<AutomationItem>(`/automations/${id}`, payload);
+    return response.data;
+  },
+
+  remove: async (id: string): Promise<{ success: boolean }> => {
+    const response = await api.delete<{ success: boolean }>(`/automations/${id}`);
+    return response.data;
+  },
+};
