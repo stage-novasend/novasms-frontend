@@ -25,22 +25,7 @@ export const useCampaignActions = () => {
 
   const duplicateCampaign = useCallback(
     async (campaign: Campaign) => {
-      store.clearDraft();
-      store.setDraftName(`${campaign.name} (copie)`);
-      store.setDraftChannel(campaign.channel);
-      if (campaign.segmentId) {
-        store.setDraftSegment(campaign.segmentId, campaign.segmentName || '');
-      }
-      if (campaign.emailContent) {
-        store.setDraftEmailContent(campaign.emailContent);
-      }
-      if (campaign.smsContent) {
-        store.setDraftSMSContent(campaign.smsContent);
-      }
-      if (campaign.abTest) {
-        store.setDraftABTest(campaign.abTest);
-      }
-      store.setDraftStep(1);
+      return store.duplicateCampaign(campaign.id);
     },
     [store]
   );

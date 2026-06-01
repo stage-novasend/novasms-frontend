@@ -40,6 +40,8 @@ export const campaignApi = {
   list: async (options?: {
     status?: string;
     channel?: string;
+    search?: string;
+    page?: number;
     limit?: number;
     offset?: number;
   }): Promise<CampaignAPIListResponse> => {
@@ -48,6 +50,8 @@ export const campaignApi = {
       const params = new URLSearchParams();
       if (options?.status) params.append('status', options.status);
       if (options?.channel) params.append('channel', options.channel);
+      if (options?.search) params.append('search', options.search);
+      if (options?.page) params.append('page', options.page.toString());
       if (options?.limit) params.append('limit', options.limit.toString());
       if (options?.offset) params.append('offset', options.offset.toString());
 
@@ -105,6 +109,22 @@ export const campaignApi = {
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting campaign:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Duplicate campaign
+   * POST /api/campaigns/:id/duplicate
+   */
+  duplicate: async (id: string): Promise<CampaignAPIResponse> => {
+    try {
+      console.log('📄 Duplicating campaign:', id);
+      const response = await api.post<CampaignAPIResponse>(`/campaigns/${id}/duplicate`, {});
+      console.log('✅ Campaign duplicated:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error duplicating campaign:', error);
       throw error;
     }
   },

@@ -1,11 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AutomationItem, WorkflowEdge, WorkflowNode } from '@/api/automations';
+import type { CampaignAPIResponse } from '@/types/campaign.types';
 
 type NodeType = 'trigger' | 'wait' | 'action' | 'end' | 'condition' | 'tag';
 type WorkflowNodeConfig = NonNullable<WorkflowNode['config']>;
 
 type Node = WorkflowNode;
 type Edge = WorkflowEdge;
+type WorkflowNodeLike = Partial<WorkflowNode> & {
+  position?: { x?: number; y?: number };
+  source?: string;
+  target?: string;
+};
+type WorkflowEdgeLike = Partial<WorkflowEdge> & {
+  source?: string;
+  target?: string;
+};
 
 type NodeTone = 'trigger' | 'wait' | 'action' | 'condition' | 'tag' | 'end';
 
@@ -51,20 +61,60 @@ const WAIT_PRESETS = [
 const CHANNEL_OPTIONS = ['Email', 'SMS', 'WhatsApp'] as const;
 
 const TAG_OPTIONS = ['VIP', 'Lead chaud', 'Nouveau client', 'Relance', 'Newsletter'] as const;
+const RETRY_ATTEMPTS = [1, 2, 3, 4, 5] as const;
+
+const normalizeCampaignStatus = (status: string | null | undefined) =>
+  String(status ?? '').trim().toLowerCase();
+
+const normalizeCampaignChannel = (value: unknown) =>
+  String(value ?? '').trim().toUpperCase();
 
 function cloneState(nodes: Node[], edges: Edge[]) {
   return { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) };
 }
 
+function normalizeWorkflowNode(rawNode: WorkflowNodeLike): Node | null {
+  if (!rawNode?.id) return null;
+
+  const position = rawNode.position ?? {};
+  const x = typeof rawNode.x === 'number' ? rawNode.x : typeof position.x === 'number' ? position.x : 0;
+  const y = typeof rawNode.y === 'number' ? rawNode.y : typeof position.y === 'number' ? position.y : 0;
+
+  return {
+    id: rawNode.id,
+    x,
+    y,
+    label: rawNode.label || rawNode.type || 'Node',
+    type: (rawNode.type || 'action') as WorkflowNode['type'],
+    config: rawNode.config,
+  };
+}
+
+function normalizeWorkflowEdge(rawEdge: WorkflowEdgeLike): Edge | null {
+  const from = rawEdge.from || rawEdge.source;
+  const to = rawEdge.to || rawEdge.target;
+  if (!from || !to) return null;
+
+  return {
+    id: rawEdge.id || `${from}-${to}`,
+    from,
+    to,
+    fromPort: rawEdge.fromPort,
+    toPort: rawEdge.toPort,
+  };
+}
+
 export default function CanvasEditor({
   automation,
   workflows = [],
+  campaigns = [],
   onSave,
   onClose,
   isSaving = false,
 }: {
   automation: AutomationItem | null;
   workflows?: AutomationItem[];
+  campaigns?: CampaignAPIResponse[];
   onSave: (workflow: { nodes: Node[]; edges: Edge[] }) => Promise<void> | void;
   onClose: () => void;
   isSaving?: boolean;
@@ -113,9 +163,21 @@ export default function CanvasEditor({
     try {
       const wf = automation.workflow;
       if (wf?.nodes && wf?.edges) {
-        setNodes(wf.nodes);
-        setEdges(wf.edges);
-        history.current = [cloneState(wf.nodes, wf.edges)];
+        const rawNodes = Array.isArray(wf.nodes)
+          ? wf.nodes
+          : wf.nodes && typeof wf.nodes === 'object'
+            ? Object.values(wf.nodes as Record<string, WorkflowNodeLike>)
+            : [];
+        const rawEdges = Array.isArray(wf.edges)
+          ? wf.edges
+          : wf.edges && typeof wf.edges === 'object'
+            ? Object.values(wf.edges as Record<string, WorkflowEdgeLike>)
+            : [];
+        const nextNodes = rawNodes.map((node) => normalizeWorkflowNode(node)).filter(Boolean) as Node[];
+        const nextEdges = rawEdges.map((edge) => normalizeWorkflowEdge(edge)).filter(Boolean) as Edge[];
+        setNodes(nextNodes);
+        setEdges(nextEdges);
+        history.current = [cloneState(nextNodes, nextEdges)];
         future.current = [];
       }
     } catch {
@@ -414,14 +476,147 @@ export default function CanvasEditor({
     setMinimapViewport({ left, top, width, height });
   }, [nodes]);
 
+  const workflowValidation = useMemo(() => {
+    const issues: string[] = [];
+    const hasTrigger = nodes.some((node) => node.type === 'trigger');
+    const hasEnd = nodes.some((node) => node.type === 'end');
+
+    if (!hasTrigger) {
+      issues.push('Ajoutez au moins un nœud Trigger.');
+    }
+    if (!hasEnd) {
+      issues.push('Ajoutez au moins un nœud End.');
+    }
+
+    for (const node of nodes) {
+      if (node.type === 'end') continue;
+      const outgoing = edges.filter((edge) => edge.from === node.id);
+      if (outgoing.length === 0) {
+        issues.push(`Le nœud "${node.label}" n’a aucune sortie.`);
+      }
+      if (node.type === 'condition') {
+        const hasLeft = outgoing.some((edge) => edge.fromPort === 'left');
+        const hasRight = outgoing.some((edge) => edge.fromPort === 'right');
+        if (!hasLeft || !hasRight) {
+          issues.push(`La condition "${node.label}" doit avoir une branche gauche et droite.`);
+        }
+      }
+    }
+
+    return {
+      valid: issues.length === 0,
+      issues,
+    };
+  }, [nodes, edges]);
+
   const handleSave = useCallback(async () => {
-    await onSave({ nodes, edges });
-  }, [nodes, edges, onSave]);
+    if (!workflowValidation.valid) return;
+    const nextWorkflow = cloneState(nodes, edges);
+    await onSave(nextWorkflow);
+  }, [nodes, edges, onSave, workflowValidation.valid]);
+
+  const autoArrange = useCallback(() => {
+    if (nodes.length === 0) return;
+    const triggerId = nodes.find((node) => node.type === 'trigger')?.id ?? nodes[0]?.id;
+    if (!triggerId) return;
+
+    const depthByNode = new Map<string, number>();
+    const queue: string[] = [triggerId];
+    depthByNode.set(triggerId, 0);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) break;
+      const currentDepth = depthByNode.get(current) ?? 0;
+      const outgoing = edges.filter((edge) => edge.from === current);
+      for (const edge of outgoing) {
+        if (!depthByNode.has(edge.to)) {
+          depthByNode.set(edge.to, currentDepth + 1);
+          queue.push(edge.to);
+        }
+      }
+    }
+
+    const grouped = new Map<number, Node[]>();
+    for (const node of nodes) {
+      const depth = depthByNode.get(node.id) ?? 0;
+      const list = grouped.get(depth) ?? [];
+      list.push(node);
+      grouped.set(depth, list);
+    }
+
+    const horizontal = 280;
+    const vertical = 160;
+    const nextNodes = [...nodes];
+    for (const [depth, list] of grouped.entries()) {
+      list
+        .sort((a, b) => a.y - b.y)
+        .forEach((node, index) => {
+          const target = nextNodes.find((entry) => entry.id === node.id);
+          if (!target) return;
+          target.x = 120 + depth * horizontal;
+          target.y = 80 + index * vertical;
+        });
+    }
+
+    setNodes(nextNodes);
+    pushHistory(nextNodes, edges);
+  }, [nodes, edges, pushHistory]);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
   );
+
+  const selectedWorkflow = useMemo(
+    () => automation ?? workflows[0] ?? null,
+    [automation, workflows],
+  );
+
+  const campaignOptions = useMemo(() => {
+    const currentChannel = normalizeCampaignChannel(selectedNode?.config?.channel || automation?.channel || 'Email');
+    const filtered = campaigns.filter((campaign) => {
+      const campaignChannel = normalizeCampaignChannel((campaign as any).channelType || (campaign as any).channel);
+      return campaignChannel === currentChannel;
+    });
+
+    const sorted = [...filtered].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+
+    return {
+      automation: sorted.filter((campaign) => normalizeCampaignStatus((campaign as any).status) === 'automation'),
+      classic: sorted.filter((campaign) => normalizeCampaignStatus((campaign as any).status) !== 'automation'),
+    };
+  }, [campaigns, selectedNode?.config?.channel, automation?.channel]);
+
+  const workflowMetrics = useMemo(() => {
+    const entries = selectedWorkflow?._count?.executions ?? 0;
+    const sent = selectedWorkflow?.sendCount ?? 0;
+    const running = Math.max(0, entries - sent);
+    const conversion = entries > 0 ? (sent / entries) * 100 : 0;
+    return { entries, running, sent, conversion };
+  }, [selectedWorkflow]);
+
+  const minimapNodes = useMemo(() => {
+    if (nodes.length === 0) return [] as Array<{ id: string; x: number; y: number; tone: NodeTone }>;
+    const minX = Math.min(...nodes.map((node) => node.x));
+    const maxX = Math.max(...nodes.map((node) => node.x + 220));
+    const minY = Math.min(...nodes.map((node) => node.y));
+    const maxY = Math.max(...nodes.map((node) => node.y + 120));
+    const width = Math.max(1, maxX - minX);
+    const height = Math.max(1, maxY - minY);
+
+    return nodes.map((node) => {
+      const copy = NODE_COPY[node.type];
+      return {
+        id: node.id,
+        x: ((node.x - minX) / width) * 188,
+        y: ((node.y - minY) / height) * 108,
+        tone: copy.tone,
+      };
+    });
+  }, [nodes]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4 backdrop-blur-sm">
@@ -443,7 +638,7 @@ export default function CanvasEditor({
             </button>
             <button
               onClick={() => void handleSave()}
-              disabled={isSaving}
+              disabled={isSaving || !workflowValidation.valid}
               className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSaving ? 'Enregistrement...' : 'Enregistrer'}
@@ -554,6 +749,13 @@ export default function CanvasEditor({
             Centrer
           </button>
           <button
+            onClick={() => autoArrange()}
+            className="rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm font-semibold text-secondary"
+            title="Réorganiser automatiquement les nœuds"
+          >
+            Auto-organiser
+          </button>
+          <button
             onClick={() => changeZoom(zoom - 0.1)}
             className="rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm font-semibold text-secondary"
             title="Dézoomer"
@@ -592,6 +794,23 @@ export default function CanvasEditor({
 
         <div className="grid flex-1 grid-cols-[260px_minmax(0,1fr)_300px] overflow-hidden bg-[#F7F9F7]">
           <aside className="border-r border-outline-variant/30 bg-white p-4">
+            <div className="mb-4 rounded-2xl border border-outline-variant/30 bg-surface/40 p-3 text-xs text-on-surface-variant">
+              <p className="font-semibold text-secondary">Aide rapide</p>
+              <p className="mt-1">1) Ajoutez les nœuds. 2) Cliquez “Lier flèche”. 3) Connectez source puis cible.</p>
+              <p className="mt-1">Double-cliquez sur un titre pour renommer un nœud.</p>
+            </div>
+
+            {!workflowValidation.valid && (
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <p className="font-semibold">Workflow incomplet</p>
+                <ul className="mt-1 space-y-1">
+                  {workflowValidation.issues.slice(0, 4).map((issue) => (
+                    <li key={issue}>• {issue}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="mb-4">
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">
                 Workflows
@@ -631,19 +850,19 @@ export default function CanvasEditor({
               <div className="mt-3 space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-on-surface-variant">Entrées totales</span>
-                  <strong>892</strong>
+                  <strong>{workflowMetrics.entries}</strong>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-on-surface-variant">En cours</span>
-                  <strong className="text-secondary">124</strong>
+                  <strong className="text-secondary">{workflowMetrics.running}</strong>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-on-surface-variant">Convertis</span>
-                  <strong className="text-success">318</strong>
+                  <strong className="text-success">{workflowMetrics.sent}</strong>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-on-surface-variant">Taux conversion</span>
-                  <strong className="text-primary">35.6%</strong>
+                  <strong className="text-primary">{workflowMetrics.conversion.toFixed(1)}%</strong>
                 </div>
               </div>
             </div>
@@ -957,6 +1176,42 @@ export default function CanvasEditor({
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-on-surface-variant">
+                          Campagne liée
+                        </label>
+                        <select
+                          className="mt-2 w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none"
+                          value={selectedNode.config?.campaignId || ''}
+                          onChange={(event) =>
+                            updateNodeConfig(selectedNode.id, { campaignId: event.target.value })
+                          }
+                        >
+                          <option value="">Aucune campagne</option>
+                          {campaignOptions.automation.length > 0 && (
+                            <optgroup label="Automatisations">
+                              {campaignOptions.automation.map((campaign) => (
+                                <option key={campaign.id} value={campaign.id}>
+                                  ⚡ {campaign.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {campaignOptions.classic.length > 0 && (
+                            <optgroup label="Campagnes classiques">
+                              {campaignOptions.classic.map((campaign) => (
+                                <option key={campaign.id} value={campaign.id}>
+                                  {campaign.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                        <p className="mt-1 text-[11px] text-on-surface-variant">
+                          La campagne automatique reste mise en avant, mais les campagnes classiques restent visibles.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-on-surface-variant">
                           Template
                         </label>
                         <input
@@ -968,11 +1223,63 @@ export default function CanvasEditor({
                           placeholder="uuid-template"
                         />
                       </div>
+                      <div>
+                        <label className="text-xs font-semibold text-on-surface-variant">
+                          Tentatives max
+                        </label>
+                        <select
+                          className="mt-2 w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none"
+                          value={String(selectedNode.config?.retryAttempts ?? 1)}
+                          onChange={(event) =>
+                            updateNodeConfig(selectedNode.id, {
+                              retryAttempts: Number(event.target.value) || 1,
+                            })
+                          }
+                        >
+                          {RETRY_ATTEMPTS.map((attempt) => (
+                            <option key={attempt} value={attempt}>
+                              {attempt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-on-surface-variant">
+                          Backoff (secondes)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="mt-2 w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none"
+                          value={String(selectedNode.config?.backoffSeconds ?? 1)}
+                          onChange={(event) =>
+                            updateNodeConfig(selectedNode.id, {
+                              backoffSeconds: Number(event.target.value) || 0,
+                            })
+                          }
+                        />
+                      </div>
                     </div>
                   )}
 
                   {selectedNode.type === 'tag' && (
                     <div className="rounded-2xl border border-outline-variant/30 bg-white p-3">
+                      <label className="text-xs font-semibold text-on-surface-variant">
+                        Mode
+                      </label>
+                      <select
+                        className="mt-2 w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none"
+                        value={selectedNode.config?.tagMode || 'add'}
+                        onChange={(event) =>
+                          updateNodeConfig(selectedNode.id, {
+                            tagMode: event.target.value as WorkflowNodeConfig['tagMode'],
+                          })
+                        }
+                      >
+                        <option value="add">Ajouter</option>
+                        <option value="remove">Retirer</option>
+                      </select>
+
                       <label className="text-xs font-semibold text-on-surface-variant">
                         Tag à appliquer
                       </label>
@@ -1126,39 +1433,29 @@ export default function CanvasEditor({
         {/* Mini-map preview */}
         <div className="minimap-preview" aria-hidden>
           <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-            <div
-              style={{
-                position: 'absolute',
-                left: '38%',
-                top: '10%',
-                width: '24%',
-                height: '12%',
-                background: 'rgba(18,163,77,0.16)',
-                borderRadius: 6,
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: '38%',
-                top: '32%',
-                width: '24%',
-                height: '12%',
-                background: 'rgba(245,158,11,0.12)',
-                borderRadius: 6,
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: '35%',
-                top: '54%',
-                width: '30%',
-                height: '15%',
-                background: 'rgba(124,58,237,0.12)',
-                borderRadius: 6,
-              }}
-            />
+            {minimapNodes.map((node) => (
+              <div
+                key={node.id}
+                style={{
+                  position: 'absolute',
+                  left: `${node.x}px`,
+                  top: `${node.y}px`,
+                  width: 14,
+                  height: 8,
+                  borderRadius: 4,
+                  background:
+                    node.tone === 'trigger'
+                      ? 'rgba(20,184,166,0.4)'
+                      : node.tone === 'wait'
+                        ? 'rgba(245,158,11,0.35)'
+                        : node.tone === 'action'
+                          ? 'rgba(101,163,13,0.35)'
+                          : node.tone === 'condition'
+                            ? 'rgba(139,92,246,0.35)'
+                            : 'rgba(100,116,139,0.3)',
+                }}
+              />
+            ))}
             {/* viewport box */}
             <div
               style={{

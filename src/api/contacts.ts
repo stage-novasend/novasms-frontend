@@ -157,6 +157,28 @@ export const contactsApi = {
     return response.data;
   },
 
+  updateSegment: async (
+    id: string,
+    payload: {
+      name?: string;
+      logic?: SegmentLogic;
+      criteria?: SegmentCriterion[];
+      type?: 'dynamic' | 'static';
+      contactIds?: string[];
+    },
+  ) => {
+    const response = await api.patch<{ success: boolean; segment: DynamicSegment }>(
+      `/contacts/segments/${id}`,
+      payload,
+    );
+    return response.data;
+  },
+
+  deleteSegment: async (id: string) => {
+    const response = await api.delete<{ success: boolean }>(`/contacts/segments/${id}`);
+    return response.data;
+  },
+
   createSegmentFromContacts: async (name: string, contactIds: string[]) => {
     const response = await api.post<{ success: boolean; segment: DynamicSegment }>('/contacts/segments', {
       name,

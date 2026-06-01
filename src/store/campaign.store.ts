@@ -28,6 +28,7 @@ export type CampaignStatus = Campaign['status'];
 
 export interface CampaignDraft {
   step: 1 | 2 | 3 | 4; // 1=Channel, 2=Content, 3=Audience, 4=Schedule
+  mode?: 'standard' | 'automation';
   stopCode?: string; // RG-22: SMS STOP code (generated once per draft)
   channel?: CampaignChannel;
   name?: string;
@@ -53,6 +54,7 @@ interface CampaignStore {
 
   // Actions: Draft Management
   setDraftStep: (step: CampaignDraft['step']) => void;
+  setDraftMode: (mode: 'standard' | 'automation') => void;
   setDraftChannel: (channel: CampaignChannel) => void;
   setDraftName: (name: string) => void;
   setDraftSegment: (segmentId: string, segmentName: string) => void;
@@ -63,9 +65,10 @@ interface CampaignStore {
   updateEstimates: (recipients: number, cost: number) => void;
 
   // Actions: Campaign CRUD
-  createCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Campaign>;
+  createCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt' | 'updatedAt' | 'segmentId'> & { segmentId?: string }) => Promise<Campaign>;
   updateCampaign: (id: string, updates: Partial<Campaign>) => Promise<Campaign>;
   deleteCampaign: (id: string) => Promise<void>;
+  duplicateCampaign: (id: string) => Promise<Campaign>;
   getCampaign: (id: string) => Campaign | undefined;
   listCampaigns: () => Campaign[];
   fetchCampaigns: () => Promise<void>;
@@ -87,6 +90,7 @@ const generateStopCode = (): string => {
 
 const INITIAL_DRAFT: CampaignDraft = {
   step: 1,
+  mode: 'standard',
   stopCode: generateStopCode(),
   channel: undefined,
   emailContent: {
@@ -121,7 +125,8 @@ const normalizeStatus = (status: string | undefined): Campaign['status'] => {
   if (value === 'SENT') return 'sent';
   if (value === 'FAILED') return 'failed';
   if (value === 'SENDING') return 'scheduled';
-  if (value === 'CANCELLED') return 'failed';
+  if (value === 'CANCELLED') return 'cancelled';
+  if (value === 'AUTOMATION') return 'automation';
   if (value === 'PAUSED') return 'paused';
   return 'draft';
 };
@@ -272,6 +277,16 @@ export const useCampaignStore = create<CampaignStore>()(
           draft: { ...state.draft, step },
         })),
 
+      setDraftMode: (mode) =>
+        set((state) => ({
+          draft: {
+            ...state.draft,
+            mode,
+            segmentId: mode === 'automation' ? undefined : state.draft.segmentId,
+            segmentName: mode === 'automation' ? undefined : state.draft.segmentName,
+          },
+        })),
+
       setDraftChannel: (channel) =>
         set((state) => ({
           draft: { ...state.draft, channel },
@@ -401,6 +416,23 @@ export const useCampaignStore = create<CampaignStore>()(
         }
       },
 
+      duplicateCampaign: async (id) => {
+        set({ isLoading: true, error: undefined });
+        try {
+          const response = await campaignApi.duplicate(id);
+          const duplicated = mapApiCampaignToModel(response);
+          set((state) => ({
+            campaigns: [duplicated, ...state.campaigns],
+            isLoading: false,
+          }));
+          return duplicated;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Duplicate failed';
+          set({ isLoading: false, error: message });
+          throw error;
+        }
+      },
+
       getCampaign: (id) => {
         return get().campaigns.find((c) => c.id === id);
       },
@@ -445,6 +477,7 @@ export const useCampaignStore = create<CampaignStore>()(
             set({
               draft: {
                 step: 1,
+                mode: campaign.status === 'automation' ? 'automation' : 'standard',
                 channel: campaign.channel,
                 name: campaign.name,
                 description: campaign.description,
@@ -474,7 +507,7 @@ export const useCampaignStore = create<CampaignStore>()(
       submitCampaign: async () => {
         const { draft, selectedCampaignId } = get();
 
-        if (!draft.channel || !draft.name || !draft.segmentId) {
+        if (!draft.channel || !draft.name || (draft.mode !== 'automation' && !draft.segmentId)) {
           set({ error: 'Missing required fields' });
           throw new Error('Missing required fields');
         }
@@ -487,14 +520,14 @@ export const useCampaignStore = create<CampaignStore>()(
               name: draft.name,
               description: draft.description,
               channel: draft.channel,
-              segmentId: draft.segmentId,
+              segmentId: draft.mode === 'automation' ? undefined : draft.segmentId,
               emailContent: draft.emailContent,
               smsContent: draft.smsContent,
               abTest: draft.abTest,
               schedule: draft.schedule,
               estimatedRecipients: draft.estimatedRecipients ?? 0,
               estimatedCost: draft.estimatedCost ?? 0,
-              status: 'scheduled',
+              status: draft.mode === 'automation' ? 'automation' : 'scheduled',
             });
           } else {
             // Create new
@@ -503,14 +536,14 @@ export const useCampaignStore = create<CampaignStore>()(
               name: draft.name,
               description: draft.description,
               channel: draft.channel,
-              segmentId: draft.segmentId,
+              segmentId: draft.mode === 'automation' ? undefined : draft.segmentId,
               emailContent: draft.emailContent,
               smsContent: draft.smsContent,
               abTest: draft.abTest,
               schedule: draft.schedule,
               estimatedRecipients: draft.estimatedRecipients ?? 0,
               estimatedCost: draft.estimatedCost ?? 0,
-              status: 'scheduled',
+              status: draft.mode === 'automation' ? 'automation' : 'scheduled',
             });
             set({ selectedCampaignId: campaign.id });
           }

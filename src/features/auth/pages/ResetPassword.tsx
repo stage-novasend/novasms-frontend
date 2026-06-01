@@ -1,6 +1,7 @@
 import { Bolt } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useState } from 'react';
+import { PasswordStrengthIndicator } from '../components/PasswordStrengthIndicator';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -59,8 +60,15 @@ export default function ResetPassword() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setError('Mot de passe trop court (min 8 caractères).');
+    // Client-side password strength checks: match backend rules
+    const checks = [
+      newPassword.length >= 8,
+      /[A-Z]/.test(newPassword),
+      /[0-9]/.test(newPassword),
+      /[^A-Za-z0-9]/.test(newPassword),
+    ];
+    if (checks.some((c) => !c)) {
+      setError('Mot de passe faible. Requis: 8+ caractères, 1 majuscule, 1 chiffre, 1 caractère spécial.');
       return;
     }
 
@@ -125,6 +133,7 @@ export default function ResetPassword() {
                   placeholder="••••••••"
                   required
                 />
+                <PasswordStrengthIndicator password={newPassword} />
               </div>
 
               <div>

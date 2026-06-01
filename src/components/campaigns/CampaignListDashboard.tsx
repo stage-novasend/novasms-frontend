@@ -1,6 +1,8 @@
 import type { FC } from 'react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import * as Dialog from '@radix-ui/react-dialog';
+import { toast } from 'sonner';
 import { useCampaignStore } from '@/store/campaign.store';
 import { useCampaignActions } from '@/hooks/useCampaign';
 import type { Campaign, CampaignStatus } from '@/store/campaign.store';
@@ -21,6 +23,7 @@ const CampaignListDashboard: FC = () => {
   const {
     campaigns,
     deleteCampaign,
+    fetchCampaigns,
     isLoading,
     error,
   } = useCampaignStore();
@@ -30,7 +33,11 @@ const CampaignListDashboard: FC = () => {
   const [channelFilter, setChannelFilter] = useState<'all' | 'SMS' | 'EMAIL'>('all');
   const [sortBy, setSortBy] = useState<'date' | 'cost'>('date');
   const [searchTerm, setSearchTerm] = useState('');
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+
+  useEffect(() => {
+    void fetchCampaigns();
+  }, [fetchCampaigns]);
 
   const filteredCampaigns = useMemo<Campaign[]>(() => {
     let result = [...campaigns];
@@ -60,11 +67,14 @@ const CampaignListDashboard: FC = () => {
     return result;
   }, [campaigns, statusFilter, channelFilter, sortBy, searchTerm]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await deleteCampaign(id);
-      setDeleteConfirm(null);
+      await deleteCampaign(deleteTarget.id);
+      toast.success('Campagne supprimée avec succès');
+      setDeleteTarget(null);
     } catch (error) {
+      toast.error('Suppression impossible pour cette campagne');
       console.error('Failed to delete campaign:', error);
     }
   };
@@ -81,6 +91,10 @@ const CampaignListDashboard: FC = () => {
         return 'bg-secondary/20 text-secondary';
       case 'failed':
         return 'bg-error/20 text-error';
+      case 'cancelled':
+        return 'bg-secondary/20 text-secondary';
+      case 'automation':
+        return 'bg-tertiary/20 text-tertiary';
       default:
         return 'bg-outline/20 text-on-surface-variant';
     }
@@ -137,6 +151,13 @@ const CampaignListDashboard: FC = () => {
             <span className="material-symbols-outlined">add</span>
             Nouvelle campagne
           </Link>
+          <Link
+            to="/campaigns/new?mode=automation"
+            className="px-6 py-3 border border-primary/30 bg-primary/5 text-primary font-bold rounded-xl hover:bg-primary/10 transition-all active:scale-95 flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined">bolt</span>
+            Campagne automatisée
+          </Link>
         </div>
 
         {/* Filters */}
@@ -157,6 +178,8 @@ const CampaignListDashboard: FC = () => {
               <option value="sent">Envoyée</option>
               <option value="paused">Mise en pause</option>
               <option value="failed">Échouée</option>
+              <option value="cancelled">Annulée</option>
+              <option value="automation">Automatisation</option>
             </select>
           </div>
 
@@ -260,6 +283,8 @@ const CampaignListDashboard: FC = () => {
                         {campaign.status === 'sent' && 'Envoyée'}
                         {campaign.status === 'paused' && 'Pause'}
                         {campaign.status === 'failed' && 'Échouée'}
+                        {campaign.status === 'cancelled' && 'Annulée'}
+                        {campaign.status === 'automation' && 'Automatisation'}
                       </span>
 
                       {/* Recipients */}
@@ -299,22 +324,20 @@ const CampaignListDashboard: FC = () => {
                     <span className="material-symbols-outlined">visibility</span>
                   </Link>
 
-                  {/* Edit (only for draft) */}
-                  {campaign.status === 'draft' && (
-                    <Link
-                      to={`/campaigns/${campaign.id}/edit`}
-                      className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-                      title="Modifier"
-                    >
-                      <span className="material-symbols-outlined">edit</span>
-                    </Link>
-                  )}
+                  <Link
+                    to={`/campaigns/${campaign.id}/edit`}
+                    className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
+                    title="Modifier"
+                  >
+                    <span className="material-symbols-outlined">edit</span>
+                  </Link>
 
                   {/* Duplicate */}
                   <button
                     onClick={async () => {
-                      await duplicateCampaign(campaign);
-                      navigate('/campaigns/new');
+                      const duplicated = await duplicateCampaign(campaign);
+                      toast.success('Campagne dupliquée');
+                      navigate(`/campaigns/${duplicated.id}/edit`);
                     }}
                     className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
                     title="Dupliquer"
@@ -322,38 +345,49 @@ const CampaignListDashboard: FC = () => {
                     <span className="material-symbols-outlined">content_copy</span>
                   </button>
 
-                  {/* Delete */}
-                  {deleteConfirm === campaign.id ? (
-                    <div className="absolute right-4 bg-surface-container rounded-lg shadow-lg p-3 flex gap-2">
-                      <button
-                        onClick={() => handleDelete(campaign.id)}
-                        disabled={isLoading}
-                        className="px-3 py-1 bg-error text-on-primary text-xs font-bold rounded disabled:opacity-50"
-                      >
-                        Confirmer
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(null)}
-                        className="px-3 py-1 bg-outline/20 text-on-surface text-xs font-bold rounded"
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setDeleteConfirm(campaign.id)}
-                      className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-                      title="Supprimer"
-                    >
-                      <span className="material-symbols-outlined text-error">delete</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setDeleteTarget(campaign)}
+                    className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
+                    title="Supprimer"
+                  >
+                    <span className="material-symbols-outlined text-error">delete</span>
+                  </button>
                 </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <Dialog.Root
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open: boolean) => !open && setDeleteTarget(null)}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-outline-variant/30 bg-surface p-6 shadow-2xl">
+            <Dialog.Title className="text-xl font-bold text-on-surface">
+              Supprimer la campagne ?
+            </Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-on-surface-variant">
+              Cette action est irréversible pour <strong>{deleteTarget?.name}</strong>.
+            </Dialog.Description>
+            <div className="mt-6 flex justify-end gap-3">
+              <Dialog.Close className="rounded-lg border border-outline-variant/40 px-4 py-2 text-sm font-semibold text-on-surface hover:bg-surface-container-high">
+                Annuler
+              </Dialog.Close>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={isLoading}
+                className="rounded-lg bg-error px-4 py-2 text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60"
+              >
+                Confirmer
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 };

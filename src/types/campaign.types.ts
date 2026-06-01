@@ -47,7 +47,7 @@ export interface Campaign {
   name: string;
   description?: string;
   channel: 'SMS' | 'EMAIL';
-  status: 'draft' | 'scheduled' | 'sent' | 'paused' | 'failed';
+  status: 'draft' | 'scheduled' | 'sent' | 'paused' | 'failed' | 'cancelled' | 'automation';
   segmentId: string;
   segmentName?: string;
   emailContent?: EmailContent;
@@ -72,6 +72,8 @@ export interface CampaignAPICreateRequest {
   name: string;
   description?: string;
   channelType: 'SMS' | 'EMAIL';
+  subject?: string;
+  content?: string;
   segmentId?: string;
   emailContent?: EmailContent;
   smsContent?: SMSContent;
@@ -91,7 +93,7 @@ export interface CampaignAPIResponse {
   name: string;
   description?: string;
   channel: 'SMS' | 'EMAIL';
-  status: 'draft' | 'scheduled' | 'sent' | 'paused' | 'failed';
+  status: 'draft' | 'scheduled' | 'sent' | 'paused' | 'failed' | 'cancelled' | 'automation';
   segmentId: string;
   segmentName?: string;
   emailContent?: EmailContent;

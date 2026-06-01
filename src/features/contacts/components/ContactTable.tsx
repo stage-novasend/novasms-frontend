@@ -18,9 +18,10 @@ import type {
 type ContactTableProps = {
   onContactClick?: (contact: Contact) => void;
   onImportClick?: () => void;
+  onAddContactClick?: () => void;
 };
 
-export default function ContactTable({ onContactClick, onImportClick }: ContactTableProps) {
+export default function ContactTable({ onContactClick, onImportClick, onAddContactClick }: ContactTableProps) {
   const { accessToken } = useAuthStore();
   
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -46,6 +47,7 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
   const [savingSegment, setSavingSegment] = useState(false);
   const [segments, setSegments] = useState<SegmentWithContacts[]>([]);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string>('');
+  const [editingSegmentId, setEditingSegmentId] = useState<string | null>(null);
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -322,10 +324,19 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
     setSavingSegment(true);
     setSegmentError(null);
     try {
-      const result = await contactsApi.createSegment(name, segmentLogic, segmentCriteria);
+      const payload = {
+        name,
+        logic: segmentLogic,
+        criteria: segmentCriteria,
+      };
+      const result = editingSegmentId
+        ? await contactsApi.updateSegment(editingSegmentId, payload)
+        : await contactsApi.createSegment(name, segmentLogic, segmentCriteria);
+
       await loadSegments();
       if (result?.segment?.id) {
         setSelectedSegmentId(result.segment.id);
+        setEditingSegmentId(result.segment.id);
       }
     } catch (error: unknown) {
       const message =
@@ -357,7 +368,53 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
         : [{ field: 'tag', operator: 'equals', value: '' }],
     );
     setSegmentName(selected.name || 'Segment');
+    setEditingSegmentId(selected.id);
     setShowFilters(true);
+  };
+
+  const editSegment = (segment: SegmentWithContacts) => {
+    const criteriaObj = (segment.criteria || {}) as {
+      logic?: SegmentLogic;
+      rules?: SegmentCriterion[];
+    };
+
+    setSelectedSegmentId(segment.id);
+    setEditingSegmentId(segment.id);
+    setSegmentName(segment.name || 'Segment');
+    setSegmentLogic(criteriaObj.logic === 'OR' ? 'OR' : 'AND');
+    setSegmentCriteria(
+      Array.isArray(criteriaObj.rules) && criteriaObj.rules.length > 0
+        ? criteriaObj.rules
+        : [{ field: 'tag', operator: 'equals', value: '' }],
+    );
+    setShowFilters(true);
+  };
+
+  const removeSegment = async (segment: SegmentWithContacts) => {
+    if (!confirm(`Supprimer le segment "${segment.name || 'Sans nom'}" ?`)) return;
+
+    try {
+      await contactsApi.deleteSegment(segment.id);
+      await loadSegments();
+      if (selectedSegmentId === segment.id) {
+        setSelectedSegmentId('');
+      }
+      if (editingSegmentId === segment.id) {
+        setEditingSegmentId(null);
+        setSegmentName('Nouveau segment');
+        setSegmentLogic('AND');
+        setSegmentCriteria([{ field: 'tag', operator: 'equals', value: '' }]);
+      }
+      setSegmentError(null);
+    } catch (error: unknown) {
+      const message =
+        typeof error === 'object' && error !== null && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : error instanceof Error
+            ? error.message
+            : 'Impossible de supprimer le segment';
+      setSegmentError(message || 'Impossible de supprimer le segment');
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -398,7 +455,10 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
             <Download className="w-4 h-4" />
             Importer CSV / XLS
           </button>
-          <button className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors flex items-center gap-2">
+          <button
+            onClick={onAddContactClick}
+            className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Ajouter un contact
           </button>
@@ -419,7 +479,10 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
             <Download className="w-4 h-4" />
             Importer CSV / XLS
           </button>
-          <button className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors flex items-center gap-2">
+          <button
+            onClick={onAddContactClick}
+            className="px-4 py-2 border border-outline-variant rounded-lg hover:bg-surface-container transition-colors flex items-center gap-2"
+          >
             <Plus className="w-4 h-4" />
             Ajouter un contact
           </button>
@@ -522,7 +585,14 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
 
         <button
           data-testid="new-segment-button"
-          onClick={() => setShowFilters(true)}
+          onClick={() => {
+            setShowFilters(true);
+            setEditingSegmentId(null);
+            setSegmentName('Nouveau segment');
+            setSegmentLogic('AND');
+            setSegmentCriteria([{ field: 'tag', operator: 'equals', value: '' }]);
+            setSegmentError(null);
+          }}
           className="px-4 py-2 text-primary font-medium rounded-lg hover:bg-primary/5 transition-colors text-sm"
         >
           + Nouveau segment
@@ -546,7 +616,11 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
                 onClick={() => void saveSegment()}
                 disabled={savingSegment}
               >
-                {savingSegment ? 'Sauvegarde…' : 'Sauvegarder'}
+                {savingSegment
+                  ? 'Sauvegarde…'
+                  : editingSegmentId
+                    ? 'Enregistrer les modifications'
+                    : 'Sauvegarder'}
               </button>
             </div>
 
@@ -652,6 +726,22 @@ export default function ContactTable({ onContactClick, onImportClick }: ContactT
                           </span>
                         </summary>
                         <div className="border-t border-outline-variant/40 px-4 py-3">
+                          <div className="mb-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => editSegment(segment)}
+                              className="rounded-md border border-outline-variant/40 px-2.5 py-1 text-xs font-semibold text-on-surface hover:bg-surface"
+                            >
+                              Modifier
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void removeSegment(segment)}
+                              className="rounded-md border border-error/30 px-2.5 py-1 text-xs font-semibold text-error hover:bg-error/10"
+                            >
+                              Supprimer
+                            </button>
+                          </div>
                           {segment.contacts.length > 0 ? (
                             <div className="space-y-2">
                               {segment.contacts.map((contact) => (

@@ -13,12 +13,21 @@ interface CampaignChannelStepProps {
 export const CampaignChannelStep: FC<CampaignChannelStepProps> = ({ onNext }) => {
   const {
     draft,
+    setDraftMode,
     setDraftChannel,
     setDraftName,
   } = useCampaignStore();
 
   const handleSelectChannel = (channel: 'SMS' | 'EMAIL') => {
+    setDraftMode('standard');
     setDraftChannel(channel);
+  };
+
+  const handleSelectAutomation = () => {
+    setDraftMode('automation');
+    if (!draft.channel) {
+      setDraftChannel('EMAIL');
+    }
   };
 
   const isValid = draft.channel && draft.name && draft.name.length >= 3;
@@ -41,8 +50,30 @@ export const CampaignChannelStep: FC<CampaignChannelStepProps> = ({ onNext }) =>
           Sélectionnez votre canal
         </h2>
         <p className="text-on-surface-variant max-w-2xl mx-auto">
-          Commencez par choisir le canal de communication. Vous pouvez combiner
-          SMS et Email dans une même campagne via A/B testing.
+          Choisissez un canal classique ou activez le mode automatisé pour créer une campagne sans segment.
+        </p>
+      </div>
+
+      <div className="max-w-2xl mx-auto rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-on-surface-variant">
+        <p className="font-semibold text-on-surface">Mode de campagne</p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => setDraftMode('standard')}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${draft.mode !== 'automation' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/40 bg-white text-secondary'}`}
+          >
+            Campagne classique
+          </button>
+          <button
+            type="button"
+            onClick={handleSelectAutomation}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${draft.mode === 'automation' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/40 bg-white text-secondary'}`}
+          >
+            Automatisation sans segment
+          </button>
+        </div>
+        <p className="mt-3 text-xs">
+          En mode automatisé, la personnalisation reste disponible dans le contenu, mais l’audience n’est pas obligatoire.
         </p>
       </div>
 

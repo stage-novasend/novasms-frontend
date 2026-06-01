@@ -1,6 +1,13 @@
 import api from './axios';
 
-export type AutomationTrigger = 'contact_added' | 'api';
+export type AutomationTrigger =
+  | 'contact_added'
+  | 'api'
+  | 'segment_joined'
+  | 'tag_added'
+  | 'campaign_opened'
+  | 'link_clicked'
+  | 'date_based';
 export type AutomationChannel = 'Email' | 'SMS' | 'WhatsApp';
 export type AutomationStatus = 'Active' | 'Inactive' | 'Draft';
 
@@ -10,6 +17,7 @@ export type WorkflowNodeConfig = {
   delaySeconds?: number;
   delayPreset?: '0' | '300' | '1800' | '3600' | '86400' | 'custom';
   tag?: string;
+  tagMode?: 'add' | 'remove';
   triggerSource?: AutomationTrigger;
   conditionType?: 'open' | 'click' | 'purchase' | 'tag' | 'field';
   campaignId?: string;
@@ -18,6 +26,8 @@ export type WorkflowNodeConfig = {
   value?: string;
   channel?: AutomationChannel;
   templateId?: string;
+  retryAttempts?: number;
+  backoffSeconds?: number;
 };
 
 export type WorkflowNode = {
@@ -47,9 +57,11 @@ export type AutomationItem = {
   accountId: string;
   name: string;
   trigger: AutomationTrigger;
+  triggerConfig?: Record<string, unknown> | null;
   delaySeconds: number;
   channel: AutomationChannel;
   templateId: string | null;
+  campaignId?: string | null;
   status: AutomationStatus;
   sendCount: number;
   workflow?: AutomationWorkflow | null;
@@ -63,9 +75,11 @@ export type AutomationItem = {
 export type AutomationCreateInput = {
   name: string;
   trigger: AutomationTrigger;
+  triggerConfig?: Record<string, unknown>;
   delaySeconds: number;
   channel: AutomationChannel;
   templateId?: string | null;
+  campaignId?: string | null;
   status?: AutomationStatus;
 };
 

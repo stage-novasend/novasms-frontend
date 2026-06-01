@@ -32,6 +32,17 @@ export const CampaignWizard: FC = () => {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
   const [isSavingAndLeaving, setIsSavingAndLeaving] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+
+  const formatRelativeLastUpdate = (value: Date | null): string => {
+    if (!value) return '';
+    return `Dernière modification : ${new Intl.DateTimeFormat('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(value)}`;
+  };
 
   useEffect(() => {
     const shouldReset = searchParams.get('fresh') === '1';
@@ -42,6 +53,20 @@ export const CampaignWizard: FC = () => {
       setSearchParams(searchParams, { replace: true });
     }
   }, [clearDraft, searchParams, setDraftStep, setSearchParams]);
+
+  useEffect(() => {
+    const automationMode = searchParams.get('mode') === 'automation';
+    if (!automationMode) return;
+
+    useCampaignStore.setState((state) => ({
+      draft: {
+        ...state.draft,
+        mode: 'automation',
+        segmentId: undefined,
+        segmentName: undefined,
+      },
+    }));
+  }, [searchParams]);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -102,6 +127,13 @@ export const CampaignWizard: FC = () => {
             promoCode: typeof campaign.promoCode === 'string' ? campaign.promoCode : '',
           },
         });
+        const updatedAtRaw = typeof campaign.updatedAt === 'string' ? campaign.updatedAt : null;
+        if (updatedAtRaw) {
+          const updatedAtDate = new Date(updatedAtRaw);
+          if (!Number.isNaN(updatedAtDate.getTime())) {
+            setLastUpdatedAt(updatedAtDate);
+          }
+        }
       } catch (error) {
         console.error('Failed to hydrate campaign for editing', error);
       }
@@ -167,12 +199,17 @@ export const CampaignWizard: FC = () => {
         const createRes = await api.post<{ id: string }>('/campaigns', {
           channelType: draft.channel,
           name: draft.name,
-          status: 'DRAFT',
+          status: draft.mode === 'automation' ? 'AUTOMATION' : 'DRAFT',
+          segmentId: draft.mode === 'automation' ? undefined : draft.segmentId,
         });
         campaignId = createRes.data.id;
       }
       const draftData: Record<string, unknown> = { name: draft.name };
-      if (draft.segmentId) draftData.segmentId = draft.segmentId;
+      if (draft.mode === 'automation') {
+        draftData.status = 'AUTOMATION';
+      } else if (draft.segmentId) {
+        draftData.segmentId = draft.segmentId;
+      }
       await saveCampaignDraft(campaignId, draftData);
       clearDraft();
       window.location.href = '/campaigns';
@@ -224,6 +261,11 @@ export const CampaignWizard: FC = () => {
           <span className="text-sm text-on-surface-variant">
             {draft.name ? `Brouillon: ${draft.name}` : 'Nouvelle campagne'}
           </span>
+          {campaignId && lastUpdatedAt && (
+            <span className="text-xs text-on-surface-variant">
+              {formatRelativeLastUpdate(lastUpdatedAt)}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-4">
@@ -244,7 +286,7 @@ export const CampaignWizard: FC = () => {
             className="px-4 py-2 bg-surface-container text-on-surface font-semibold hover:bg-surface-container-high transition-colors disabled:opacity-50 rounded-lg flex items-center gap-2"
           >
             <span className="material-symbols-outlined text-sm">save</span>
-            Enregistrer
+            {campaignId ? 'Enregistrer les modifications' : 'Enregistrer'}
           </button>
           <button
             onClick={() => setConfirmDiscard(true)}

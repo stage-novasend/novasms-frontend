@@ -89,6 +89,69 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
     ? (contactCounts[selectedSegment.id] ?? selectedSegment.contactCount ?? 0)
     : 0;
 
+  if (draft.mode === 'automation') {
+    return (
+      <div className="max-w-5xl mx-auto px-8 py-12 space-y-12">
+        <div className="flex justify-center">
+          <div className="flex items-center gap-4 w-full">
+            <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
+              <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">✓</span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">Canal</span>
+            </div>
+            <div className="w-20 h-[2px] bg-primary/40" />
+            <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
+              <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">✓</span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">Contenu</span>
+            </div>
+            <div className="w-20 h-[2px] bg-primary/40" />
+            <div className="flex flex-col items-center gap-2 flex-1 text-primary">
+              <span className="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-sm text-on-primary shadow-lg shadow-primary/20">3</span>
+              <span className="text-xs font-bold uppercase hidden sm:inline">Audience</span>
+            </div>
+            <div className="w-20 h-[2px] bg-outline-variant/30" />
+            <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
+              <span className="w-10 h-10 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-sm">4</span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">Planif.</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-center space-y-4">
+          <h2 className="text-4xl font-headline font-bold text-on-surface">
+            Audience facultative
+          </h2>
+          <p className="text-on-surface-variant max-w-2xl mx-auto">
+            Cette campagne est en mode automatisé. Vous pouvez personnaliser le contenu, mais aucun segment n'est requis.
+          </p>
+        </div>
+
+        <div className="max-w-3xl mx-auto rounded-2xl border border-primary/20 bg-primary/5 p-8 text-left space-y-4">
+          <p className="font-bold text-on-surface">Ce que cela change</p>
+          <ul className="space-y-2 text-on-surface-variant">
+            <li>• La campagne peut être enregistrée sans segment.</li>
+            <li>• La personnalisation reste disponible dans l’étape Contenu.</li>
+            <li>• Le module Campagnes reste cohérent avec les automatisations.</li>
+          </ul>
+        </div>
+
+        <div className="flex justify-between gap-4">
+          <button
+            onClick={onPrev}
+            className="px-8 py-3 text-on-surface-variant font-bold hover:text-on-surface transition-colors"
+          >
+            ← Précédent
+          </button>
+          <button
+            onClick={onNext}
+            className="px-8 py-3 bg-primary text-on-primary font-bold rounded-lg hover:brightness-110 transition-all active:scale-95"
+          >
+            Continuer →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     if (selectedSegment) {
       const count = contactCounts[selectedSegment.id] ?? selectedSegment.contactCount ?? 0;

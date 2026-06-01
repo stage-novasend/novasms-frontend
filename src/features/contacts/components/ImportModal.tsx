@@ -97,30 +97,63 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
     setError(null);
 
     try {
-      // Appel API backend
-      const response = await api.post('/contacts/import', {
-        fileName: file.name,
-        mapping,
-        rows: parsedData.rows,
-      }, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      });
+      // Si gros fichier, utiliser upload par chunks (évite OOM / large payloads)
+      const CHUNK_THRESHOLD = 5000; // lignes au-dessus desquelles on chunk
+      const CHUNK_SIZE = 2000;
 
-      if (response.data.success) {
-        setStep('report');
-        // Utiliser les stats du rapport retourné par le backend
-        const importedReport: ImportReport = {
-          jobId: response.data.jobId,
+      if (parsedData.rows.length > CHUNK_THRESHOLD) {
+        // 1) Demander un fileId
+        const startRes = await api.post('/contacts/import/start', { fileName: file.name }, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const fileId = startRes.data.fileId;
+
+        // 2) Envoyer les chunks séquentiellement
+        for (let i = 0; i < parsedData.rows.length; i += CHUNK_SIZE) {
+          const chunk = parsedData.rows.slice(i, i + CHUNK_SIZE);
+          await api.post('/contacts/import/chunk', { fileId, rows: chunk }, { headers: { Authorization: `Bearer ${accessToken}` } });
+        }
+
+        // 3) Finaliser l'import
+        const completeRes = await api.post('/contacts/import/complete', { fileId, fileName: file.name }, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (completeRes.data.success) {
+          setStep('report');
+          const importedReport: ImportReport = {
+            jobId: completeRes.data.result?.jobId || `import-${Date.now()}`,
+            fileName: file.name,
+            totalRecords: completeRes.data.result?.report?.totalRecords || parsedData.rows.length,
+            successCount: completeRes.data.result?.report?.successCount || 0,
+            duplicateCount: completeRes.data.result?.report?.duplicateCount || 0,
+            errorCount: completeRes.data.result?.report?.errorCount || 0,
+            status: 'completed',
+          };
+          setReport(importedReport);
+          onImportComplete(importedReport);
+        }
+      } else {
+        // Petit fichier: comportement existant (POST unique)
+        const response = await api.post('/contacts/import', {
           fileName: file.name,
-          totalRecords: response.data.report?.totalRecords || parsedData.rows.length,
-          successCount: response.data.report?.successCount || 0,
-          duplicateCount: response.data.report?.duplicateCount || 0,
-          errorCount: response.data.report?.errorCount || 0,
-          status: 'completed',
-        };
+          mapping,
+          rows: parsedData.rows,
+        }, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
 
-        setReport(importedReport);
-        onImportComplete(importedReport);
+        if (response.data.success) {
+          setStep('report');
+          // Utiliser les stats du rapport retourné par le backend
+          const importedReport: ImportReport = {
+            jobId: response.data.jobId,
+            fileName: file.name,
+            totalRecords: response.data.report?.totalRecords || parsedData.rows.length,
+            successCount: response.data.report?.successCount || 0,
+            duplicateCount: response.data.report?.duplicateCount || 0,
+            errorCount: response.data.report?.errorCount || 0,
+            status: 'completed',
+          };
+
+          setReport(importedReport);
+          onImportComplete(importedReport);
+        }
       }
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };

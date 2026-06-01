@@ -15,6 +15,7 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
   const navigate = useNavigate();
   const { draft, setDraftSchedule, setDraftABTest, clearDraft, selectedCampaignId } =
     useCampaignStore();
+  const isAutomationMode = draft.mode === 'automation';
 
   const [scheduleType, setScheduleType] = useState<'immediate' | 'scheduled'>(
     draft.schedule?.type === 'scheduled' ? 'scheduled' : 'immediate',
@@ -113,6 +114,11 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       return;
     }
 
+    if (!isAutomationMode && !draft.segmentId) {
+      toast.error("Veuillez sélectionner un segment d'audience");
+      return;
+    }
+
     setIsSaving(true);
     handleScheduleChange();
     handleABTestChange();
@@ -127,7 +133,8 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         const createRes = await api.post<{ id: string }>('/campaigns', {
           channelType: latestDraft.channel,
           name: latestDraft.name,
-          status: 'DRAFT',
+          status: isAutomationMode ? 'AUTOMATION' : 'DRAFT',
+          segmentId: isAutomationMode ? undefined : latestDraft.segmentId,
         });
         campaignId = createRes.data.id;
         useCampaignStore.setState({ selectedCampaignId: campaignId });
@@ -145,6 +152,9 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         name: latestDraft.name,
         timezone,
       };
+      if (isAutomationMode) {
+        draftData.status = 'AUTOMATION';
+      }
       if (subject) draftData.subject = subject;
       if (content) draftData.content = content;
       const emailContentPayload = buildEmailContentPayload(
@@ -155,7 +165,7 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         draftData.emailContent = emailContentPayload;
         draftData.contentJson = emailContentPayload;
       }
-      if (latestDraft.segmentId) draftData.segmentId = latestDraft.segmentId;
+      if (latestDraft.segmentId && !isAutomationMode) draftData.segmentId = latestDraft.segmentId;
       if (promoCode) draftData.promoCode = promoCode;
 
       const result = await saveCampaignDraft(campaignId, draftData);
@@ -179,6 +189,11 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
   const handleSendCampaign = async () => {
     const latestDraft = useCampaignStore.getState().draft;
 
+    if (isAutomationMode) {
+      await handleSaveDraft();
+      return;
+    }
+
     if (!latestDraft.segmentId) {
       toast.error("Veuillez sélectionner un segment d'audience");
       return;
@@ -198,6 +213,21 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     setIsSaving(true);
     handleScheduleChange();
 
+    if (scheduleType === 'scheduled') {
+      if (!scheduledDate || !scheduledTime) {
+        toast.error('Choisissez une date et une heure pour la programmation');
+        setIsSaving(false);
+        return;
+      }
+
+      const plannedDate = new Date(`${scheduledDate}T${scheduledTime}`);
+      if (Number.isNaN(plannedDate.getTime()) || plannedDate.getTime() <= Date.now()) {
+        toast.error('La date planifiée doit être dans le futur');
+        setIsSaving(false);
+        return;
+      }
+    }
+
     try {
       console.log('🚀 Preparing to send campaign...');
 
@@ -208,13 +238,13 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         const createRes = await api.post<{ id: string }>('/campaigns', {
           channelType: latestDraft.channel,
           name: latestDraft.name,
-          segmentId: latestDraft.segmentId,
+          segmentId: isAutomationMode ? undefined : latestDraft.segmentId,
           promoCode: promoCode || undefined,
           subject,
           content,
           estimatedRecipients: latestDraft.estimatedRecipients || 0,
           estimatedCost: latestDraft.estimatedCost || 0,
-          status: 'DRAFT',
+          status: isAutomationMode ? 'AUTOMATION' : 'DRAFT',
         });
         campaignId = createRes.data.id;
         useCampaignStore.setState({ selectedCampaignId: campaignId });
@@ -223,11 +253,16 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
 
       const draftData: Record<string, unknown> = {
         name: latestDraft.name,
-        segmentId: latestDraft.segmentId,
         timezone,
         estimatedRecipients: latestDraft.estimatedRecipients || 0,
         estimatedCost: latestDraft.estimatedCost || 0,
       };
+      if (!isAutomationMode && latestDraft.segmentId) {
+        draftData.segmentId = latestDraft.segmentId;
+      }
+      if (isAutomationMode) {
+        draftData.status = 'AUTOMATION';
+      }
       if (subject) draftData.subject = subject;
       if (content) draftData.content = content;
       const emailContentPayload = buildEmailContentPayload(
@@ -259,6 +294,10 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
             : '✓ Campagne envoyée avec succès';
         console.log('✅ Send campaign successful');
         toast.success(message);
+
+        // Refresh list cache so /campaigns reflects latest status without manual reload.
+        await useCampaignStore.getState().fetchCampaigns();
+
         clearDraft();
         setTimeout(() => navigate('/campaigns'), 1500);
       } else {
@@ -351,41 +390,45 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
           <div className="space-y-12">
             <div className="space-y-4">
               <h2 className="text-4xl font-headline font-bold text-on-surface">
-                Planifiez votre envoi
+                {isAutomationMode
+                  ? 'Enregistrez votre campagne automatisée'
+                  : 'Planifiez votre envoi'}
               </h2>
               <p className="text-on-surface-variant">
-                Configurez la date et l'heure d'envoi de votre campagne.
+                {isAutomationMode
+                  ? 'Aucun segment n’est requis. La campagne sera sauvegardée comme automatisation.'
+                  : "Configurez la date et l'heure d'envoi de votre campagne."}
               </p>
             </div>
 
-            {/* Schedule Options */}
-            <div className="space-y-4">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="radio"
-                  name="schedule"
-                  value="immediate"
-                  checked={scheduleType === 'immediate'}
-                  onChange={(e) => setScheduleType(e.target.value as 'immediate')}
-                  className="w-5 h-5 cursor-pointer"
-                />
-                <span className="font-bold text-on-surface">Envoyer maintenant</span>
-              </label>
+            {!isAutomationMode && (
+              <div className="space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="schedule"
+                        value="immediate"
+                        checked={scheduleType === 'immediate'}
+                        onChange={(e) => setScheduleType(e.target.value as 'immediate')}
+                        className="w-5 h-5 cursor-pointer"
+                      />
+                      <span className="font-bold text-on-surface">Envoyer maintenant</span>
+                    </label>
 
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="radio"
-                  name="schedule"
-                  value="scheduled"
-                  checked={scheduleType === 'scheduled'}
-                  onChange={(e) => setScheduleType(e.target.value as 'scheduled')}
-                  className="w-5 h-5 cursor-pointer"
-                />
-                <span className="font-bold text-on-surface">Programmer pour plus tard</span>
-              </label>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="schedule"
+                        value="scheduled"
+                        checked={scheduleType === 'scheduled'}
+                        onChange={(e) => setScheduleType(e.target.value as 'scheduled')}
+                        className="w-5 h-5 cursor-pointer"
+                      />
+                      <span className="font-bold text-on-surface">Programmer pour plus tard</span>
+                    </label>
 
-              {scheduleType === 'scheduled' && (
-                <div className="mt-6 p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
+                {scheduleType === 'scheduled' && (
+                  <div className="mt-6 p-4 bg-primary/5 rounded-lg border border-primary/20 space-y-4">
                   <div>
                     <label className="text-sm font-bold text-on-surface">Date</label>
                     <input
@@ -417,8 +460,9 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
                     </select>
                   </div>
                 </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Promo Code */}
             <div className="space-y-2">
@@ -472,22 +516,24 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
             {/* Action Buttons */}
             <div className="space-y-3">
               <button
-                onClick={handleSendCampaign}
+                onClick={isAutomationMode ? handleSaveDraft : handleSendCampaign}
                 disabled={isSaving}
                 className="w-full px-8 py-3 bg-primary text-on-primary font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 transition-all active:scale-95"
               >
                 {isSaving
                   ? 'Traitement...'
-                  : scheduleType === 'scheduled'
-                    ? 'Programmer'
-                    : 'Envoyer'}
+                  : isAutomationMode
+                    ? 'Créer la campagne automatisée'
+                    : scheduleType === 'scheduled'
+                      ? 'Programmer'
+                      : 'Envoyer'}
               </button>
               <button
-                onClick={handleSaveDraft}
+                onClick={() => void handleSaveDraft()}
                 disabled={isSaving}
                 className="w-full px-8 py-3 border-2 border-primary text-primary font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-primary/5 transition-all active:scale-95"
               >
-                Enregistrer brouillon
+                {isAutomationMode ? 'Enregistrer comme automatisation' : 'Enregistrer brouillon'}
               </button>
               <button
                 onClick={onPrev}

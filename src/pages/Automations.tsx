@@ -8,14 +8,27 @@ import {
   type AutomationWorkflow,
   type WorkflowNode,
 } from '@/api/automations';
+import { campaignApi } from '@/api/campaignApi';
+import type {
+  CampaignAPICreateRequest,
+  CampaignAPIResponse,
+} from '@/types/campaign.types';
 import CanvasEditor from '@/components/CanvasEditor';
 
 type DraftAutomation = {
   name: string;
-  trigger: 'contact_added' | 'api';
+  trigger:
+    | 'contact_added'
+    | 'api'
+    | 'segment_joined'
+    | 'tag_added'
+    | 'campaign_opened'
+    | 'link_clicked'
+    | 'date_based';
   delaySeconds: string;
   delayPreset: '0' | '300' | '1800' | '3600' | '86400' | 'custom';
   channel: 'Email' | 'SMS' | 'WhatsApp';
+  campaignId: string;
   templateId: string;
   status: 'Active' | 'Inactive' | 'Draft';
 };
@@ -34,6 +47,7 @@ const initialDraft: DraftAutomation = {
   delaySeconds: '3600',
   delayPreset: '3600',
   channel: 'Email',
+  campaignId: '',
   templateId: '',
   status: 'Active',
 };
@@ -49,6 +63,7 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       delaySeconds: '3600',
       delayPreset: '3600',
       channel: 'Email',
+      campaignId: '',
       templateId: '',
       status: 'Active',
     },
@@ -97,6 +112,7 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       delaySeconds: '1800',
       delayPreset: '1800',
       channel: 'SMS',
+      campaignId: '',
       templateId: '',
       status: 'Active',
     },
@@ -152,6 +168,7 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       delaySeconds: '300',
       delayPreset: '300',
       channel: 'WhatsApp',
+      campaignId: '',
       templateId: '',
       status: 'Draft',
     },
@@ -219,8 +236,18 @@ function formatDelay(seconds: number) {
   return `${hours} h`;
 }
 
-function triggerLabel(trigger: 'contact_added' | 'api') {
-  return trigger === 'contact_added' ? 'Contact ajouté' : 'Intégration externe';
+function triggerLabel(trigger: DraftAutomation['trigger']) {
+  const labels: Record<DraftAutomation['trigger'], string> = {
+    contact_added: 'Contact ajouté',
+    api: 'Intégration externe',
+    segment_joined: 'Entrée segment',
+    tag_added: 'Tag ajouté',
+    campaign_opened: 'Campagne ouverte',
+    link_clicked: 'Lien cliqué',
+    date_based: 'Date planifiée',
+  };
+
+  return labels[trigger] ?? trigger;
 }
 
 function statusChip(status: AutomationItem['status']) {
@@ -277,7 +304,31 @@ export default function Automations() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null | undefined>(undefined);
   const [draft, setDraft] = useState<DraftAutomation>(initialDraft);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignAPIResponse[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<string | null>(null);
+
+  const campaignChannel = useMemo(() => {
+    if (draft.channel === 'Email') return 'EMAIL';
+    if (draft.channel === 'SMS') return 'SMS';
+    return null;
+  }, [draft.channel]);
+
+  const normalizeCampaignStatus = (status: string | null | undefined) =>
+    String(status ?? '').trim().toLowerCase();
+
+  const groupedCampaigns = useMemo(() => {
+    const sorted = [...campaigns].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+
+    return {
+      automation: sorted.filter((campaign) => normalizeCampaignStatus(campaign.status) === 'automation'),
+      classic: sorted.filter((campaign) => normalizeCampaignStatus(campaign.status) !== 'automation'),
+    };
+  }, [campaigns]);
 
   const selectedAutomation = useMemo(
     () =>
@@ -325,17 +376,64 @@ export default function Automations() {
     void loadAutomations();
   }, []);
 
+  useEffect(() => {
+    if (!campaignChannel) {
+      setCampaigns([]);
+      setDraft((current) => ({ ...current, campaignId: '' }));
+      return;
+    }
+
+    const loadCampaigns = async () => {
+      setCampaignsLoading(true);
+      try {
+        const response = await campaignApi.list({
+          channel: campaignChannel,
+          page: 1,
+          limit: 100,
+        });
+        setCampaigns(response.data ?? []);
+      } catch (error) {
+        setCampaigns([]);
+        console.error(error);
+      } finally {
+        setCampaignsLoading(false);
+      }
+    };
+
+    void loadCampaigns();
+  }, [campaignChannel]);
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
 
     try {
+      if (editingId) {
+        const updated = await automationsApi.update(editingId, {
+          name: draft.name.trim(),
+          trigger: draft.trigger,
+          delaySeconds: Number(draft.delaySeconds) || 0,
+          channel: draft.channel,
+          templateId: draft.templateId.trim() || null,
+          campaignId: draft.campaignId || null,
+          status: draft.status,
+        });
+
+        setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        setSelectedId(updated.id);
+        setEditingId(null);
+        setSelectedTemplateKey(null);
+        toast.success('Workflow mis à jour');
+        return;
+      }
+
       const created = await automationsApi.create({
         name: draft.name.trim(),
         trigger: draft.trigger,
         delaySeconds: Number(draft.delaySeconds) || 0,
         channel: draft.channel,
         templateId: draft.templateId.trim() || undefined,
+        campaignId: draft.campaignId || undefined,
         status: draft.status,
       });
 
@@ -366,6 +464,27 @@ export default function Automations() {
     }
   };
 
+  const loadSelectedForEdition = () => {
+    if (!selectedAutomation) {
+      toast.error('Sélectionnez un workflow à modifier');
+      return;
+    }
+
+    setDraft({
+      name: selectedAutomation.name,
+      trigger: selectedAutomation.trigger,
+      delaySeconds: String(selectedAutomation.delaySeconds ?? 0),
+      delayPreset: 'custom',
+      channel: selectedAutomation.channel,
+      campaignId: (selectedAutomation as any).campaignId ?? '',
+      templateId: selectedAutomation.templateId ?? '',
+      status: selectedAutomation.status,
+    });
+    setEditingId(selectedAutomation.id);
+    setSelectedTemplateKey(null);
+    toast.info('Workflow chargé pour modification');
+  };
+
   const handleToggle = async (id: string) => {
     try {
       const updated = await automationsApi.toggle(id);
@@ -373,6 +492,29 @@ export default function Automations() {
       toast.success(updated.status === 'Active' ? 'Workflow activé' : 'Workflow désactivé');
     } catch (error) {
       toast.error('Impossible de changer le statut');
+      console.error(error);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await automationsApi.remove(id);
+      setItems((current) => {
+        const next = current.filter((item) => item.id !== id);
+        setSelectedId((selected) => {
+          if (selected === id) {
+            return next[0]?.id ?? null;
+          }
+          return selected;
+        });
+        return next;
+      });
+      toast.success('Workflow supprimé');
+    } catch (error: any) {
+      const message =
+        error?.response?.data?.message ||
+        'Impossible de supprimer ce workflow';
+      toast.error(String(message));
       console.error(error);
     }
   };
@@ -392,6 +534,38 @@ export default function Automations() {
     setDraft(template.draft);
     setSelectedTemplateKey(template.key);
     toast.info(`Modèle “${template.label}” prêt à être créé`);
+  };
+
+  const handleCreateAutomationCampaign = async () => {
+    if (!campaignChannel) {
+      toast.error('La campagne automation est disponible uniquement pour Email ou SMS');
+      return;
+    }
+
+    setCreatingCampaign(true);
+    try {
+      const baseName = draft.name.trim() || 'Campagne automation';
+      const payload: CampaignAPICreateRequest = {
+        name: `${baseName} · Campaign`,
+        channelType: campaignChannel,
+        status: 'AUTOMATION',
+        subject: campaignChannel === 'EMAIL' ? baseName : undefined,
+        content:
+          campaignChannel === 'SMS'
+            ? 'Message automatique. Repondez STOP pour vous desinscrire.'
+            : undefined,
+      };
+
+      const created = await campaignApi.create(payload);
+      setCampaigns((current) => [created, ...current]);
+      setDraft((current) => ({ ...current, campaignId: created.id }));
+      toast.success('Campagne automation créée et liée au workflow');
+    } catch (error) {
+      toast.error('Impossible de créer la campagne automation');
+      console.error(error);
+    } finally {
+      setCreatingCampaign(false);
+    }
   };
 
   return (
@@ -420,6 +594,18 @@ export default function Automations() {
               disabled={!selectedAutomation}
               onClick={() => {
                 if (!selectedAutomation) return;
+                if (!window.confirm('Supprimer ce workflow ?')) return;
+                void handleDelete(selectedAutomation.id);
+              }}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Supprimer
+            </button>
+            <button
+              type="button"
+              disabled={!selectedAutomation}
+              onClick={() => {
+                if (!selectedAutomation) return;
                 void handleToggle(selectedAutomation.id);
               }}
               className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
@@ -441,6 +627,7 @@ export default function Automations() {
                   onClick={() => {
                     setDraft(initialDraft);
                     setSelectedId(null);
+                    setEditingId(null);
                     setSelectedTemplateKey(null);
                     setEditorOpen(false);
                     toast.info('Nouveau workflow prêt à être créé');
@@ -642,6 +829,30 @@ export default function Automations() {
               Configurez le déclencheur, le délai et le canal pour créer un workflow conforme.
             </p>
 
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                disabled={!selectedAutomation}
+                onClick={loadSelectedForEdition}
+                className="rounded-lg border border-outline-variant/40 bg-white px-3 py-2 text-xs font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Charger la sélection
+              </button>
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setDraft(initialDraft);
+                    setSelectedTemplateKey(null);
+                  }}
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                >
+                  Annuler l’édition
+                </button>
+              )}
+            </div>
+
             <form className="mt-4 space-y-3" onSubmit={(event) => void handleCreate(event)}>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-secondary" htmlFor="automation-name">
@@ -679,6 +890,11 @@ export default function Automations() {
                 >
                   <option value="contact_added">Contact ajouté</option>
                   <option value="api">Intégration externe (site, CRM, Zapier)</option>
+                  <option value="segment_joined">Entrée dans un segment</option>
+                  <option value="tag_added">Tag ajouté</option>
+                  <option value="campaign_opened">Campagne ouverte</option>
+                  <option value="link_clicked">Lien cliqué</option>
+                  <option value="date_based">Date planifiée</option>
                 </select>
               </div>
 
@@ -761,6 +977,94 @@ export default function Automations() {
               </div>
 
               <div className="space-y-1">
+                <label
+                  className="text-xs font-semibold text-secondary"
+                  htmlFor="automation-campaign-id"
+                >
+                  Campagne automation (optionnel)
+                </label>
+                <div className="mb-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={!campaignChannel || creatingCampaign}
+                    onClick={() => void handleCreateAutomationCampaign()}
+                    className="rounded-lg border border-outline-variant/40 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {creatingCampaign ? 'Création...' : 'Créer campagne automation'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!campaignChannel || campaignsLoading}
+                    onClick={() => {
+                      if (!campaignChannel) return;
+                      setCampaignsLoading(true);
+                      void campaignApi
+                        .list({
+                          status: 'automation',
+                          channel: campaignChannel,
+                          page: 1,
+                          limit: 100,
+                        })
+                        .then((response) => setCampaigns(response.data ?? []))
+                        .catch((error) => {
+                          setCampaigns([]);
+                          console.error(error);
+                        })
+                        .finally(() => setCampaignsLoading(false));
+                    }}
+                    className="rounded-lg border border-outline-variant/40 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Rafraîchir
+                  </button>
+                </div>
+                <div className="mb-2 rounded-lg border border-dashed border-outline-variant/40 bg-surface/30 px-3 py-2 text-[11px] text-on-surface-variant">
+                  Les campagnes sont regroupées en <span className="font-semibold text-secondary">Automatisations</span> et <span className="font-semibold text-secondary">Classiques</span> dans le sélecteur.
+                </div>
+                <select
+                  id="automation-campaign-id"
+                  disabled={!campaignChannel || campaignsLoading}
+                  className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:bg-surface"
+                  value={draft.campaignId}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, campaignId: event.target.value }))
+                  }
+                >
+                  <option value="">Aucune campagne liée</option>
+                  {groupedCampaigns.automation.length > 0 && (
+                    <optgroup label="Automatisations">
+                      {groupedCampaigns.automation.map((campaign) => (
+                        <option key={campaign.id} value={campaign.id}>
+                          ⚡ {campaign.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {groupedCampaigns.classic.length > 0 && (
+                    <optgroup label="Campagnes classiques">
+                      {groupedCampaigns.classic.map((campaign) => (
+                        <option key={campaign.id} value={campaign.id}>
+                          {campaign.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                    {campaignsLoading && (
+                  <p className="text-[11px] text-on-surface-variant">Chargement des campagnes...</p>
+                )}
+                {!campaignsLoading && campaignChannel && campaigns.length === 0 && (
+                  <p className="text-[11px] text-on-surface-variant">
+                    Aucune campagne trouvée pour ce canal.
+                  </p>
+                )}
+                {!campaignChannel && (
+                  <p className="text-[11px] text-on-surface-variant">
+                    Disponible uniquement pour Email et SMS.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-secondary" htmlFor="automation-status">
                   Statut
                 </label>
@@ -809,7 +1113,7 @@ export default function Automations() {
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                Créer le workflow
+                {editingId ? 'Enregistrer les modifications' : 'Créer le workflow'}
               </button>
             </form>
 
@@ -866,6 +1170,7 @@ export default function Automations() {
         <CanvasEditor
           automation={selectedAutomation}
           workflows={items}
+          campaigns={campaigns}
           onSave={async (workflow) => {
             if (!selectedAutomation) return;
             try {
