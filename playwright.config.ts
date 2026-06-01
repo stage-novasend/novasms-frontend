@@ -13,7 +13,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run dev',
+    command: 'node apps/backend/scripts/seed_e2e.js && npm run dev',
     cwd: repoRoot,
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
