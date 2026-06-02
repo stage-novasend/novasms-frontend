@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useCampaignStore } from '@/store/campaign.store';
 import { calculateSMSSegments, calculateSMSCost, CONTACT_VARIABLES } from '@/types/campaign.types';
 
@@ -16,9 +16,9 @@ import { calculateSMSSegments, calculateSMSCost, CONTACT_VARIABLES } from '@/typ
 
 export const SMSEditor: FC = () => {
   const { draft, setDraftSMSContent } = useCampaignStore();
-  const [senderName, setSenderName] = useState(draft.smsContent?.senderName || 'NOVA_PRECISION');
-  const [message, setMessage] = useState(draft.smsContent?.message || '');
-  const [shortLink, setShortLink] = useState('');
+  const senderName = draft.smsContent?.senderName || 'NOVA_PRECISION';
+  const message = draft.smsContent?.message || '';
+  const shortLink = draft.smsContent?.shortLinks?.default || '';
 
   // RG-22: STOP code is generated once per draft and persisted
   const stopCode = draft.stopCode || 'STOP';
@@ -26,6 +26,23 @@ export const SMSEditor: FC = () => {
   // RG-22: STOP block is mandatory and included in character count
   const STOP_BLOCK = `STOP au ${stopCode}\n`;
   const totalMessageLength = message.length + STOP_BLOCK.length;
+
+  const updateSmsContent = (updates: {
+    message?: string;
+    senderName?: string;
+    shortLink?: string;
+  }) => {
+    const nextMessage = updates.message ?? message;
+    const nextSenderName = updates.senderName ?? senderName;
+    const nextShortLink = updates.shortLink ?? shortLink;
+
+    setDraftSMSContent({
+      message: nextMessage,
+      senderName: nextSenderName,
+      shortLinks: nextShortLink ? { default: nextShortLink } : undefined,
+      variables: Object.values(CONTACT_VARIABLES.sms),
+    });
+  };
 
   // Calculate segments and cost - WITH DYNAMIC RECIPIENT COUNT
   const recipientCount = draft.segmentId ? (draft.estimatedRecipients || 0) : 0;
@@ -36,16 +53,11 @@ export const SMSEditor: FC = () => {
   );
 
   const handleSave = () => {
-    setDraftSMSContent({
-      message,
-      senderName,
-      shortLinks: shortLink ? { default: shortLink } : undefined,
-      variables: Object.values(CONTACT_VARIABLES.sms),
-    });
+    updateSmsContent({});
   };
 
   const handleInsertVariable = (variable: string) => {
-    setMessage(message + variable);
+    updateSmsContent({ message: message + variable });
   };
 
   const isTooLong = totalMessageLength > 160;
@@ -63,7 +75,7 @@ export const SMSEditor: FC = () => {
             <input
               type="text"
               value={senderName}
-              onChange={(e) => setSenderName(e.target.value)}
+              onChange={(e) => updateSmsContent({ senderName: e.target.value })}
               maxLength={11}
               className="flex-1 bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3.5 font-semibold text-on-surface transition-all"
             />
@@ -104,7 +116,7 @@ export const SMSEditor: FC = () => {
 
           <textarea
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => updateSmsContent({ message: e.target.value })}
             placeholder="Rédigez votre message ici..."
             rows={6}
             className={`w-full bg-surface-container-lowest border-none ring-1 focus:ring-2 rounded-2xl px-5 py-5 font-body text-base text-on-surface resize-none leading-relaxed transition-all ${
@@ -189,7 +201,7 @@ export const SMSEditor: FC = () => {
             <input
               type="url"
               value={shortLink}
-              onChange={(e) => setShortLink(e.target.value)}
+              onChange={(e) => updateSmsContent({ shortLink: e.target.value })}
               placeholder="https://votre-boutique.com/promo"
               className="flex-1 bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3.5 font-body text-sm transition-all"
             />

@@ -34,6 +34,83 @@ export const CampaignWizard: FC = () => {
   const [isSavingAndLeaving, setIsSavingAndLeaving] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
+  const buildEmailTextContent = () => {
+    const blocks = draft.emailContent?.blocks || [];
+    return blocks
+      .map((block) => {
+        if (block.type === 'text' && typeof block.content.text === 'string') {
+          return block.content.text;
+        }
+        if (block.type === 'button' && typeof block.content.text === 'string') {
+          return block.content.text;
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+  };
+
+  const buildRemoteDraftPayload = (): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      name: draft.name,
+    };
+
+    if (draft.mode === 'automation') {
+      payload.status = 'AUTOMATION';
+    } else if (draft.segmentId) {
+      payload.segmentId = draft.segmentId;
+    }
+
+    if (draft.channel === 'EMAIL') {
+      const emailContentPayload = {
+        subject: draft.emailContent?.subject || '',
+        preheader: draft.emailContent?.preheader || '',
+        blocks: draft.emailContent?.blocks || [],
+      };
+      payload.emailContent = emailContentPayload;
+      payload.contentJson = emailContentPayload;
+      if (emailContentPayload.subject) payload.subject = emailContentPayload.subject;
+
+      const textContent = buildEmailTextContent();
+      if (textContent) payload.content = textContent;
+    }
+
+    if (draft.channel === 'SMS') {
+      const smsMessage = draft.smsContent?.message || '';
+      if (smsMessage) payload.content = smsMessage;
+    }
+
+    if (draft.schedule?.timezone) {
+      payload.timezone = draft.schedule.timezone;
+    }
+
+    if (draft.promoCode) {
+      payload.promoCode = draft.promoCode;
+    }
+
+    return payload;
+  };
+
+  const persistDraftToBackend = async (): Promise<boolean> => {
+    if (!draft.channel || !draft.name) return false;
+
+    let campaignIdToUse = selectedCampaignId;
+    if (!campaignIdToUse) {
+      const createRes = await api.post<{ id: string }>('/campaigns', {
+        channelType: draft.channel,
+        name: draft.name,
+        status: draft.mode === 'automation' ? 'AUTOMATION' : 'DRAFT',
+        segmentId: draft.mode === 'automation' ? undefined : draft.segmentId,
+      });
+      campaignIdToUse = createRes.data.id;
+      useCampaignStore.setState({ selectedCampaignId: campaignIdToUse });
+    }
+
+    const result = await saveCampaignDraft(campaignIdToUse, buildRemoteDraftPayload());
+    return result.success;
+  };
+
   const formatRelativeLastUpdate = (value: Date | null): string => {
     if (!value) return '';
     return `Dernière modification : ${new Intl.DateTimeFormat('fr-FR', {
@@ -165,8 +242,16 @@ export const CampaignWizard: FC = () => {
   const handleSaveDraft = async () => {
     console.log('💾 Saving draft:', draft);
     saveDraft();
-    console.log('✅ Draft saved successfully');
-    setDraftSaved(true);
+
+    try {
+      const persisted = await persistDraftToBackend();
+      if (persisted) {
+        console.log('✅ Draft saved successfully');
+        setDraftSaved(true);
+      }
+    } catch (error) {
+      console.error('❌ Error while saving draft to backend:', error);
+    }
   };
 
   const handleNext = async () => {
@@ -207,25 +292,9 @@ export const CampaignWizard: FC = () => {
     }
     setIsSavingAndLeaving(true);
     try {
-      let campaignId = selectedCampaignId;
-      if (!campaignId) {
-        const createRes = await api.post<{ id: string }>('/campaigns', {
-          channelType: draft.channel,
-          name: draft.name,
-          status: draft.mode === 'automation' ? 'AUTOMATION' : 'DRAFT',
-          segmentId: draft.mode === 'automation' ? undefined : draft.segmentId,
-        });
-        campaignId = createRes.data.id;
-      }
-      const draftData: Record<string, unknown> = { name: draft.name };
-      if (draft.mode === 'automation') {
-        draftData.status = 'AUTOMATION';
-      } else if (draft.segmentId) {
-        draftData.segmentId = draft.segmentId;
-      }
-      const result = await saveCampaignDraft(campaignId, draftData);
-      if (!result.success) {
-        throw new Error(result.error || 'Erreur lors de la sauvegarde du brouillon');
+      const persisted = await persistDraftToBackend();
+      if (!persisted) {
+        throw new Error('Erreur lors de la sauvegarde du brouillon');
       }
       clearDraft();
       window.location.href = '/campaigns';

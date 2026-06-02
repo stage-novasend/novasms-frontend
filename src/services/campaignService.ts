@@ -12,6 +12,46 @@ export interface CampaignResponse {
   message?: string;
 }
 
+const extractApiErrorMessage = (
+  error: unknown,
+  fallback: string,
+): string => {
+  if (!error || typeof error !== 'object') return fallback;
+
+  const err = error as {
+    response?: {
+      data?: {
+        error?: unknown;
+        message?: unknown;
+      };
+    };
+    message?: unknown;
+  };
+
+  const apiError = err.response?.data?.error;
+  if (typeof apiError === 'string' && apiError.trim().length > 0) {
+    return apiError;
+  }
+
+  const apiMessage = err.response?.data?.message;
+  if (typeof apiMessage === 'string' && apiMessage.trim().length > 0) {
+    return apiMessage;
+  }
+
+  if (Array.isArray(apiMessage) && apiMessage.length > 0) {
+    const first = apiMessage.find((item) => typeof item === 'string');
+    if (typeof first === 'string' && first.trim().length > 0) {
+      return first;
+    }
+  }
+
+  if (typeof err.message === 'string' && err.message.trim().length > 0) {
+    return err.message;
+  }
+
+  return fallback;
+};
+
 /**
  * Récupérer le nombre de contacts actifs dans un segment
  */
@@ -58,7 +98,10 @@ export async function saveCampaignDraft(
     console.error('❌ Error saving draft:', error);
     return {
       success: false,
-      error: "Une erreur s'est produite. Veuillez réessayer.",
+      error: extractApiErrorMessage(
+        error,
+        "Une erreur s'est produite. Veuillez réessayer.",
+      ),
     };
   }
 }
@@ -94,7 +137,10 @@ export async function sendCampaign(
     console.error('❌ Error sending campaign:', error);
     return {
       success: false,
-      error: "Une erreur s'est produite. Veuillez réessayer.",
+      error: extractApiErrorMessage(
+        error,
+        "Une erreur s'est produite. Veuillez réessayer.",
+      ),
     };
   }
 }
@@ -124,7 +170,10 @@ export async function cancelCampaign(campaignId: string): Promise<CampaignRespon
     console.error('❌ Error cancelling campaign:', error);
     return {
       success: false,
-      error: "Une erreur s'est produite. Veuillez réessayer.",
+      error: extractApiErrorMessage(
+        error,
+        "Une erreur s'est produite. Veuillez réessayer.",
+      ),
     };
   }
 }
@@ -146,7 +195,10 @@ export async function getCampaignDetails(campaignId: string): Promise<CampaignRe
     console.error('❌ Error fetching campaign:', error);
     return {
       success: false,
-      error: "Une erreur s'est produite. Veuillez réessayer.",
+      error: extractApiErrorMessage(
+        error,
+        "Une erreur s'est produite. Veuillez réessayer.",
+      ),
     };
   }
 }
