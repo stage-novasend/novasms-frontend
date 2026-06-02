@@ -13,24 +13,16 @@ interface CampaignChannelStepProps {
 export const CampaignChannelStep: FC<CampaignChannelStepProps> = ({ onNext }) => {
   const {
     draft,
-    setDraftMode,
     setDraftChannel,
     setDraftName,
   } = useCampaignStore();
 
   const handleSelectChannel = (channel: 'SMS' | 'EMAIL') => {
-    setDraftMode('standard');
     setDraftChannel(channel);
   };
 
-  const handleSelectAutomation = () => {
-    setDraftMode('automation');
-    if (!draft.channel) {
-      setDraftChannel('EMAIL');
-    }
-  };
-
   const isValid = draft.channel && draft.name && draft.name.length >= 3;
+  const isAutomationMode = draft.mode === 'automation';
 
   return (
     <div className="max-w-4xl mx-auto px-8 py-12 space-y-12">
@@ -56,24 +48,13 @@ export const CampaignChannelStep: FC<CampaignChannelStepProps> = ({ onNext }) =>
 
       <div className="max-w-2xl mx-auto rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-on-surface-variant">
         <p className="font-semibold text-on-surface">Mode de campagne</p>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => setDraftMode('standard')}
-            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${draft.mode !== 'automation' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/40 bg-white text-secondary'}`}
-          >
-            Campagne classique
-          </button>
-          <button
-            type="button"
-            onClick={handleSelectAutomation}
-            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${draft.mode === 'automation' ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/40 bg-white text-secondary'}`}
-          >
-            Automatisation sans segment
-          </button>
+        <div className="mt-3 inline-flex rounded-full border border-primary/20 bg-white px-4 py-2 text-sm font-semibold text-secondary">
+          {isAutomationMode ? 'Automatisation sans segment' : 'Campagne classique'}
         </div>
         <p className="mt-3 text-xs">
-          En mode automatisé, la personnalisation reste disponible dans le contenu, mais l’audience n’est pas obligatoire.
+          {isAutomationMode
+            ? 'Le mode a été défini depuis la page d’entrée. L’audience n’est pas obligatoire.'
+            : 'Le mode a été défini depuis la page d’entrée. L’audience sera choisie à l’étape suivante.'}
         </p>
       </div>
 

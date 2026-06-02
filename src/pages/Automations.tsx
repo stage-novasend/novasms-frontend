@@ -8,11 +8,13 @@ import {
   type AutomationWorkflow,
   type WorkflowNode,
 } from '@/api/automations';
+import { contactsApi } from '@/api/contacts';
 import { campaignApi } from '@/api/campaignApi';
 import type {
   CampaignAPICreateRequest,
   CampaignAPIResponse,
 } from '@/types/campaign.types';
+import type { Contact, DynamicSegment } from '@/features/contacts/types/contact';
 import CanvasEditor from '@/components/CanvasEditor';
 
 type DraftAutomation = {
@@ -30,6 +32,11 @@ type DraftAutomation = {
   channel: 'Email' | 'SMS' | 'WhatsApp';
   campaignId: string;
   templateId: string;
+  triggerConfig: {
+    runAt: string;
+    segmentId: string;
+    contactId: string;
+  };
   status: 'Active' | 'Inactive' | 'Draft';
 };
 
@@ -49,6 +56,11 @@ const initialDraft: DraftAutomation = {
   channel: 'Email',
   campaignId: '',
   templateId: '',
+  triggerConfig: {
+    runAt: '',
+    segmentId: '',
+    contactId: '',
+  },
   status: 'Active',
 };
 
@@ -65,6 +77,11 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       channel: 'Email',
       campaignId: '',
       templateId: '',
+      triggerConfig: {
+        runAt: '',
+        segmentId: '',
+        contactId: '',
+      },
       status: 'Active',
     },
     workflow: {
@@ -114,6 +131,11 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       channel: 'SMS',
       campaignId: '',
       templateId: '',
+      triggerConfig: {
+        runAt: '',
+        segmentId: '',
+        contactId: '',
+      },
       status: 'Active',
     },
     workflow: {
@@ -170,6 +192,11 @@ const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       channel: 'WhatsApp',
       campaignId: '',
       templateId: '',
+      triggerConfig: {
+        runAt: '',
+        segmentId: '',
+        contactId: '',
+      },
       status: 'Draft',
     },
     workflow: {
@@ -238,16 +265,94 @@ function formatDelay(seconds: number) {
 
 function triggerLabel(trigger: DraftAutomation['trigger']) {
   const labels: Record<DraftAutomation['trigger'], string> = {
-    contact_added: 'Contact ajouté',
-    api: 'Intégration externe',
-    segment_joined: 'Entrée segment',
-    tag_added: 'Tag ajouté',
-    campaign_opened: 'Campagne ouverte',
-    link_clicked: 'Lien cliqué',
-    date_based: 'Date planifiée',
+    contact_added: 'Nouveau contact',
+    api: 'Événement externe (API / webhook)',
+    segment_joined: 'Entrée dans un segment',
+    tag_added: 'Tag ajouté au contact',
+    campaign_opened: 'Ouverture de campagne',
+    link_clicked: 'Clic sur un lien',
+    date_based: 'Date ou anniversaire planifié',
   };
 
   return labels[trigger] ?? trigger;
+}
+
+function orderWorkflowNodes(workflow?: AutomationWorkflow | null) {
+  const nodes = workflow?.nodes ?? [];
+  const edges = workflow?.edges ?? [];
+  if (nodes.length <= 1) return nodes;
+
+  const nodeMap = new Map(nodes.map((node) => [node.id, node] as const));
+  const outgoing = new Map<string, string[]>();
+
+  for (const edge of edges) {
+    const list = outgoing.get(edge.from) ?? [];
+    list.push(edge.to);
+    outgoing.set(edge.from, list);
+  }
+
+  const triggerNode = nodes.find((node) => node.type === 'trigger') ?? nodes[0];
+  const ordered: typeof nodes = [];
+  const visited = new Set<string>();
+  const queue: string[] = triggerNode ? [triggerNode.id] : [];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (!currentId || visited.has(currentId)) continue;
+    const current = nodeMap.get(currentId);
+    if (!current) continue;
+    visited.add(currentId);
+    ordered.push(current);
+
+    const nextIds = outgoing.get(currentId) ?? [];
+    for (const nextId of nextIds) {
+      if (!visited.has(nextId)) queue.push(nextId);
+    }
+  }
+
+  const remaining = nodes.filter((node) => !visited.has(node.id));
+  remaining.sort((a, b) => a.y - b.y || a.x - b.x);
+
+  return [...ordered, ...remaining];
+}
+
+function getTriggerConfigValue(config: unknown, key: 'runAt' | 'segmentId' | 'contactId') {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return '';
+  const value = (config as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function toDateTimeLocalValue(value: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (num: number) => String(num).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function buildTriggerConfigPayload(draft: DraftAutomation) {
+  const triggerConfig: Record<string, unknown> = {};
+  if (draft.trigger === 'date_based') {
+    if (draft.triggerConfig.runAt) {
+      const runAt = new Date(draft.triggerConfig.runAt);
+      if (!Number.isNaN(runAt.getTime())) {
+        triggerConfig.runAt = runAt.toISOString();
+      }
+    }
+    if (draft.triggerConfig.segmentId) {
+      triggerConfig.segmentId = draft.triggerConfig.segmentId;
+    }
+    if (draft.triggerConfig.contactId) {
+      triggerConfig.contactId = draft.triggerConfig.contactId;
+    }
+  }
+
+  return Object.keys(triggerConfig).length > 0 ? triggerConfig : undefined;
 }
 
 function statusChip(status: AutomationItem['status']) {
@@ -274,7 +379,7 @@ function describeWorkflowNode(node?: WorkflowNode | null) {
 }
 
 function workflowNodesFromAutomation(automation: AutomationItem | null) {
-  return automation?.workflow?.nodes ?? [];
+  return orderWorkflowNodes(automation?.workflow ?? null);
 }
 
 function PreviewNode({
@@ -308,6 +413,10 @@ export default function Automations() {
   const [campaigns, setCampaigns] = useState<CampaignAPIResponse[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [creatingCampaign, setCreatingCampaign] = useState(false);
+  const [segments, setSegments] = useState<DynamicSegment[]>([]);
+  const [segmentsLoading, setSegmentsLoading] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
   const [selectedTemplateKey, setSelectedTemplateKey] = useState<string | null>(null);
 
   const campaignChannel = useMemo(() => {
@@ -326,7 +435,7 @@ export default function Automations() {
 
     return {
       automation: sorted.filter((campaign) => normalizeCampaignStatus(campaign.status) === 'automation'),
-      classic: sorted.filter((campaign) => normalizeCampaignStatus(campaign.status) !== 'automation'),
+      classic: [],
     };
   }, [campaigns]);
 
@@ -377,6 +486,30 @@ export default function Automations() {
   }, []);
 
   useEffect(() => {
+    const loadSegmentsAndContacts = async () => {
+      setSegmentsLoading(true);
+      setContactsLoading(true);
+      try {
+        const [segmentList, contactList] = await Promise.all([
+          contactsApi.listSegments(),
+          contactsApi.list({ limit: 100 }),
+        ]);
+        setSegments(segmentList);
+        setContacts(contactList.data ?? []);
+      } catch (error) {
+        console.error(error);
+        setSegments([]);
+        setContacts([]);
+      } finally {
+        setSegmentsLoading(false);
+        setContactsLoading(false);
+      }
+    };
+
+    void loadSegmentsAndContacts();
+  }, []);
+
+  useEffect(() => {
     if (!campaignChannel) {
       setCampaigns([]);
       setDraft((current) => ({ ...current, campaignId: '' }));
@@ -387,6 +520,7 @@ export default function Automations() {
       setCampaignsLoading(true);
       try {
         const response = await campaignApi.list({
+          status: 'automation',
           channel: campaignChannel,
           page: 1,
           limit: 100,
@@ -416,6 +550,7 @@ export default function Automations() {
           channel: draft.channel,
           templateId: draft.templateId.trim() || null,
           campaignId: draft.campaignId || null,
+          triggerConfig: buildTriggerConfigPayload(draft),
           status: draft.status,
         });
 
@@ -434,6 +569,7 @@ export default function Automations() {
         channel: draft.channel,
         templateId: draft.templateId.trim() || undefined,
         campaignId: draft.campaignId || undefined,
+        triggerConfig: buildTriggerConfigPayload(draft),
         status: draft.status,
       });
 
@@ -478,6 +614,11 @@ export default function Automations() {
       channel: selectedAutomation.channel,
       campaignId: (selectedAutomation as any).campaignId ?? '',
       templateId: selectedAutomation.templateId ?? '',
+      triggerConfig: {
+        runAt: toDateTimeLocalValue(getTriggerConfigValue(selectedAutomation.triggerConfig, 'runAt')),
+        segmentId: getTriggerConfigValue(selectedAutomation.triggerConfig, 'segmentId'),
+        contactId: getTriggerConfigValue(selectedAutomation.triggerConfig, 'contactId'),
+      },
       status: selectedAutomation.status,
     });
     setEditingId(selectedAutomation.id);
@@ -557,7 +698,13 @@ export default function Automations() {
       };
 
       const created = await campaignApi.create(payload);
-      setCampaigns((current) => [created, ...current]);
+      const refreshed = await campaignApi.list({
+        status: 'automation',
+        channel: campaignChannel,
+        page: 1,
+        limit: 100,
+      });
+      setCampaigns(refreshed.data ?? []);
       setDraft((current) => ({ ...current, campaignId: created.id }));
       toast.success('Campagne automation créée et liée au workflow');
     } catch (error) {
@@ -888,15 +1035,107 @@ export default function Automations() {
                     }))
                   }
                 >
-                  <option value="contact_added">Contact ajouté</option>
-                  <option value="api">Intégration externe (site, CRM, Zapier)</option>
+                  <option value="contact_added">Nouveau contact</option>
+                  <option value="api">Événement externe (site, CRM, Zapier)</option>
                   <option value="segment_joined">Entrée dans un segment</option>
-                  <option value="tag_added">Tag ajouté</option>
-                  <option value="campaign_opened">Campagne ouverte</option>
-                  <option value="link_clicked">Lien cliqué</option>
-                  <option value="date_based">Date planifiée</option>
+                  <option value="tag_added">Tag ajouté au contact</option>
+                  <option value="campaign_opened">Ouverture de campagne</option>
+                  <option value="link_clicked">Clic sur un lien</option>
+                  <option value="date_based">Date ou anniversaire planifié</option>
                 </select>
               </div>
+
+              {draft.trigger === 'date_based' && (
+                <div className="space-y-3 rounded-xl border border-primary/10 bg-primary/5 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">
+                    Programmation date_based
+                  </p>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-secondary" htmlFor="automation-run-at">
+                      Exécuter le
+                    </label>
+                    <input
+                      id="automation-run-at"
+                      type="datetime-local"
+                      className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none transition focus:border-primary"
+                      value={draft.triggerConfig.runAt}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          triggerConfig: {
+                            ...current.triggerConfig,
+                            runAt: event.target.value,
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-secondary" htmlFor="automation-segment-id">
+                      Segment cible (optionnel)
+                    </label>
+                    <select
+                      id="automation-segment-id"
+                      className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none transition focus:border-primary"
+                      value={draft.triggerConfig.segmentId}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          triggerConfig: {
+                            ...current.triggerConfig,
+                            segmentId: event.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      <option value="">Aucun segment</option>
+                      {segments.map((segment) => (
+                        <option key={segment.id} value={segment.id}>
+                          {segment.name || segment.id}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-on-surface-variant">
+                      {segmentsLoading ? 'Chargement des segments...' : 'Associe l’automatisation à un segment précis.'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-secondary" htmlFor="automation-contact-id">
+                      Contact cible (optionnel)
+                    </label>
+                    <select
+                      id="automation-contact-id"
+                      className="w-full rounded-lg border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none transition focus:border-primary"
+                      value={draft.triggerConfig.contactId}
+                      onChange={(event) =>
+                        setDraft((current) => ({
+                          ...current,
+                          triggerConfig: {
+                            ...current.triggerConfig,
+                            contactId: event.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      <option value="">Aucun contact</option>
+                      {contacts.map((contact) => {
+                        const label = [contact.firstName, contact.lastName].filter(Boolean).join(' ').trim();
+                        return (
+                          <option key={contact.id} value={contact.id}>
+                            {label || contact.email || contact.phone || contact.id}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-[11px] text-on-surface-variant">
+                      {contactsLoading ? 'Chargement des contacts...' : 'Laissez vide si le déclenchement doit viser le segment ou la campagne liée.'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label
@@ -1018,7 +1257,7 @@ export default function Automations() {
                   </button>
                 </div>
                 <div className="mb-2 rounded-lg border border-dashed border-outline-variant/40 bg-surface/30 px-3 py-2 text-[11px] text-on-surface-variant">
-                  Les campagnes sont regroupées en <span className="font-semibold text-secondary">Automatisations</span> et <span className="font-semibold text-secondary">Classiques</span> dans le sélecteur.
+                  Le sélecteur n’affiche que les campagnes <span className="font-semibold text-secondary">Automatisations</span>.
                 </div>
                 <select
                   id="automation-campaign-id"
@@ -1035,15 +1274,6 @@ export default function Automations() {
                       {groupedCampaigns.automation.map((campaign) => (
                         <option key={campaign.id} value={campaign.id}>
                           ⚡ {campaign.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {groupedCampaigns.classic.length > 0 && (
-                    <optgroup label="Campagnes classiques">
-                      {groupedCampaigns.classic.map((campaign) => (
-                        <option key={campaign.id} value={campaign.id}>
-                          {campaign.name}
                         </option>
                       ))}
                     </optgroup>

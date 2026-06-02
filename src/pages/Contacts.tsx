@@ -74,16 +74,20 @@ export default function ContactsPage() {
     setAddError(null);
 
     try {
-      await contactsApi.create({
-        firstName: firstName || undefined,
-        lastName: lastName || undefined,
-        email: email || undefined,
-        phone: phone || undefined,
-        location: location || undefined,
-        tags,
-      });
+        const created = await contactsApi.create({
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+          email: email || undefined,
+          phone: phone || undefined,
+          location: location || undefined,
+          tags,
+        });
 
-      toast.success('Contact créé');
+        if ((created as any).alreadyExists) {
+          toast.success('Le contact existe déjà');
+        } else {
+          toast.success('Contact créé');
+        }
       setRefreshKey((prev) => prev + 1);
       closeAddModal();
     } catch (error) {

@@ -45,14 +45,23 @@ export const CampaignWizard: FC = () => {
   };
 
   useEffect(() => {
-    const shouldReset = searchParams.get('fresh') === '1';
+    const isNewCampaign = !campaignId;
+    const shouldReset = searchParams.get('fresh') === '1' || isNewCampaign;
     if (shouldReset) {
       clearDraft();
       setDraftStep(1);
+      if (searchParams.get('mode') === 'automation') {
+        useCampaignStore.setState((state) => ({
+          draft: {
+            ...state.draft,
+            mode: 'automation',
+          },
+        }));
+      }
       searchParams.delete('fresh');
       setSearchParams(searchParams, { replace: true });
     }
-  }, [clearDraft, searchParams, setDraftStep, setSearchParams]);
+  }, [campaignId, clearDraft, searchParams, setDraftStep, setSearchParams]);
 
   useEffect(() => {
     const automationMode = searchParams.get('mode') === 'automation';
@@ -84,6 +93,10 @@ export const CampaignWizard: FC = () => {
           selectedCampaignId: campaignId,
           draft: {
             step: 1,
+            mode:
+              typeof campaign.status === 'string' && campaign.status === 'AUTOMATION'
+                ? 'automation'
+                : 'standard',
             channel: typeof campaign.channelType === 'string' && campaign.channelType === 'SMS' ? 'SMS' : 'EMAIL',
             name: typeof campaign.name === 'string' ? campaign.name : undefined,
             description: typeof campaign.description === 'string' ? campaign.description : undefined,
@@ -210,12 +223,15 @@ export const CampaignWizard: FC = () => {
       } else if (draft.segmentId) {
         draftData.segmentId = draft.segmentId;
       }
-      await saveCampaignDraft(campaignId, draftData);
+      const result = await saveCampaignDraft(campaignId, draftData);
+      if (!result.success) {
+        throw new Error(result.error || 'Erreur lors de la sauvegarde du brouillon');
+      }
       clearDraft();
       window.location.href = '/campaigns';
     } catch {
-      clearDraft();
-      window.location.href = '/campaigns';
+      setIsSavingAndLeaving(false);
+      return;
     }
   };
 

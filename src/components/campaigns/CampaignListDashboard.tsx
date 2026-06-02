@@ -67,6 +67,13 @@ const CampaignListDashboard: FC = () => {
     return result;
   }, [campaigns, statusFilter, channelFilter, sortBy, searchTerm]);
 
+  const groupedCampaigns = useMemo(() => {
+    const automation = filteredCampaigns.filter((campaign) => campaign.status === 'automation');
+    const classic = filteredCampaigns.filter((campaign) => campaign.status !== 'automation');
+
+    return { automation, classic };
+  }, [filteredCampaigns]);
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -118,6 +125,113 @@ const CampaignListDashboard: FC = () => {
   const formatCost = (amount: number) => {
     return `${amount.toFixed(2)} FCFA`;
   };
+
+  const renderCampaignCard = (campaign: Campaign, tone: 'automation' | 'classic') => (
+    <div
+      key={campaign.id}
+      className={`relative rounded-2xl p-6 flex items-center justify-between transition-all border ${tone === 'automation' ? 'bg-primary/5 border-primary/15 hover:bg-primary/10' : 'bg-surface-container border-outline-variant/10 hover:bg-surface-container-high'}`}
+    >
+      <div className="absolute left-0 top-0 h-full w-1.5 rounded-l-2xl bg-current opacity-70" />
+
+      {/* Left: Campaign Info */}
+      <div className="flex-1 flex items-start gap-6 pl-2">
+        {/* Channel Icon & Name */}
+        <div className="flex items-start gap-4 flex-1">
+          <div className="text-4xl">{getChannelIcon(campaign.channel)}</div>
+          <div className="flex-1">
+            <div className="mb-2 flex items-center gap-2">
+              <h3 className="font-headline font-bold text-lg text-on-surface">
+                {campaign.name}
+              </h3>
+              {tone === 'automation' && (
+                <span className="rounded-full bg-tertiary/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-tertiary">
+                  Automatisation
+                </span>
+              )}
+            </div>
+            {campaign.description && (
+              <p className="text-on-surface-variant text-sm mb-3">
+                {campaign.description}
+              </p>
+            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              <span
+                className={`text-xs font-bold px-3 py-1 rounded-full ${getStatusBadgeColor(
+                  campaign.status
+                )}`}
+              >
+                {campaign.status === 'draft' && 'Brouillon'}
+                {campaign.status === 'scheduled' && 'Planifiée'}
+                {campaign.status === 'sent' && 'Envoyée'}
+                {campaign.status === 'paused' && 'Pause'}
+                {campaign.status === 'failed' && 'Échouée'}
+                {campaign.status === 'cancelled' && 'Annulée'}
+                {campaign.status === 'automation' && 'Automatisation'}
+              </span>
+
+              <div className="text-xs text-on-surface-variant flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">group</span>
+                {campaign.estimatedRecipients.toLocaleString('fr-FR')} contacts
+              </div>
+
+              <div className="text-xs text-on-surface-variant flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">schedule</span>
+                {formatDate(campaign.updatedAt)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right: Cost & Actions */}
+      <div className="flex items-center gap-6">
+        <div className="text-right">
+          <p className="text-on-surface-variant text-xs font-bold uppercase">Coût</p>
+          <p className="font-headline font-black text-2xl text-primary">
+            {formatCost(campaign.estimatedCost)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link
+            to={`/campaigns/${campaign.id}`}
+            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
+            title="Voir"
+          >
+            <span className="material-symbols-outlined">visibility</span>
+          </Link>
+
+          <Link
+            to={`/campaigns/${campaign.id}/edit`}
+            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
+            title="Modifier"
+          >
+            <span className="material-symbols-outlined">edit</span>
+          </Link>
+
+          <button
+            onClick={async () => {
+              const duplicated = await duplicateCampaign(campaign);
+              toast.success('Campagne dupliquée');
+              navigate(`/campaigns/${duplicated.id}/edit`);
+            }}
+            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
+            title="Dupliquer"
+          >
+            <span className="material-symbols-outlined">content_copy</span>
+          </button>
+
+          <button
+            onClick={() => setDeleteTarget(campaign)}
+            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
+            title="Supprimer"
+          >
+            <span className="material-symbols-outlined text-error">delete</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-8 py-12">
@@ -251,111 +365,58 @@ const CampaignListDashboard: FC = () => {
           </Link>
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredCampaigns.map((campaign) => (
-            <div
-              key={campaign.id}
-              className="relative bg-surface-container rounded-2xl p-6 flex items-center justify-between hover:bg-surface-container-high transition-all border border-outline-variant/10"
-            >
-              {/* Left: Campaign Info */}
-              <div className="flex-1 flex items-start gap-6">
-                {/* Channel Icon & Name */}
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="text-4xl">{getChannelIcon(campaign.channel)}</div>
-                  <div className="flex-1">
-                    <h3 className="font-headline font-bold text-lg text-on-surface mb-1">
-                      {campaign.name}
-                    </h3>
-                    {campaign.description && (
-                      <p className="text-on-surface-variant text-sm mb-3">
-                        {campaign.description}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {/* Status Badge */}
-                      <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${getStatusBadgeColor(
-                          campaign.status
-                        )}`}
-                      >
-                        {campaign.status === 'draft' && 'Brouillon'}
-                        {campaign.status === 'scheduled' && 'Planifiée'}
-                        {campaign.status === 'sent' && 'Envoyée'}
-                        {campaign.status === 'paused' && 'Pause'}
-                        {campaign.status === 'failed' && 'Échouée'}
-                        {campaign.status === 'cancelled' && 'Annulée'}
-                        {campaign.status === 'automation' && 'Automatisation'}
-                      </span>
-
-                      {/* Recipients */}
-                      <div className="text-xs text-on-surface-variant flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">group</span>
-                        {campaign.estimatedRecipients.toLocaleString('fr-FR')} contacts
-                      </div>
-
-                      {/* Date */}
-                      <div className="text-xs text-on-surface-variant flex items-center gap-1">
-                        <span className="material-symbols-outlined text-sm">schedule</span>
-                        {formatDate(campaign.updatedAt)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+        <div className="space-y-8">
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-widest text-tertiary">
+                  Automatisées
+                </h2>
+                <p className="text-xs text-on-surface-variant">
+                  Campagnes lancées depuis le parcours automatisé sans segment.
+                </p>
               </div>
-
-              {/* Right: Cost & Actions */}
-              <div className="flex items-center gap-6">
-                {/* Cost */}
-                <div className="text-right">
-                  <p className="text-on-surface-variant text-xs font-bold uppercase">Coût</p>
-                  <p className="font-headline font-black text-2xl text-primary">
-                    {formatCost(campaign.estimatedCost)}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  {/* View */}
-                  <Link
-                    to={`/campaigns/${campaign.id}`}
-                    className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-                    title="Voir"
-                  >
-                    <span className="material-symbols-outlined">visibility</span>
-                  </Link>
-
-                  <Link
-                    to={`/campaigns/${campaign.id}/edit`}
-                    className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-                    title="Modifier"
-                  >
-                    <span className="material-symbols-outlined">edit</span>
-                  </Link>
-
-                  {/* Duplicate */}
-                  <button
-                    onClick={async () => {
-                      const duplicated = await duplicateCampaign(campaign);
-                      toast.success('Campagne dupliquée');
-                      navigate(`/campaigns/${duplicated.id}/edit`);
-                    }}
-                    className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-                    title="Dupliquer"
-                  >
-                    <span className="material-symbols-outlined">content_copy</span>
-                  </button>
-
-                  <button
-                    onClick={() => setDeleteTarget(campaign)}
-                    className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-                    title="Supprimer"
-                  >
-                    <span className="material-symbols-outlined text-error">delete</span>
-                  </button>
-                </div>
-              </div>
+              <span className="rounded-full bg-tertiary/10 px-3 py-1 text-xs font-bold text-tertiary">
+                {groupedCampaigns.automation.length}
+              </span>
             </div>
-          ))}
+
+            {groupedCampaigns.automation.length > 0 ? (
+              <div className="space-y-4">
+                {groupedCampaigns.automation.map((campaign) => renderCampaignCard(campaign, 'automation'))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-tertiary/20 bg-tertiary/5 p-6 text-sm text-on-surface-variant">
+                Aucune campagne automatisée ne correspond à vos filtres.
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold uppercase tracking-widest text-primary">
+                  Classiques
+                </h2>
+                <p className="text-xs text-on-surface-variant">
+                  Campagnes créées via le parcours standard avec audience.
+                </p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                {groupedCampaigns.classic.length}
+              </span>
+            </div>
+
+            {groupedCampaigns.classic.length > 0 ? (
+              <div className="space-y-4">
+                {groupedCampaigns.classic.map((campaign) => renderCampaignCard(campaign, 'classic'))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-primary/20 bg-primary/5 p-6 text-sm text-on-surface-variant">
+                Aucune campagne classique ne correspond à vos filtres.
+              </div>
+            )}
+          </section>
         </div>
       )}
 

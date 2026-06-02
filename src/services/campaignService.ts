@@ -41,6 +41,13 @@ export async function saveCampaignDraft(
     console.log('💾 Saving campaign draft:', campaignId);
     const response = await api.post(`/campaigns/${campaignId}/save-draft`, draftData);
 
+    if (!response.data?.success) {
+      return {
+        success: false,
+        error: response.data?.error || 'Erreur lors de la sauvegarde du brouillon',
+      };
+    }
+
     console.log('✅ Draft saved successfully');
     return {
       success: true,

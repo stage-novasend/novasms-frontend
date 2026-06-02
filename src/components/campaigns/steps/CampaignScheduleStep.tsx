@@ -152,6 +152,9 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         name: latestDraft.name,
         timezone,
       };
+      if (scheduleType === 'scheduled' && scheduledDate && scheduledTime) {
+        draftData.scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+      }
       if (isAutomationMode) {
         draftData.status = 'AUTOMATION';
       }
@@ -257,6 +260,9 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         estimatedRecipients: latestDraft.estimatedRecipients || 0,
         estimatedCost: latestDraft.estimatedCost || 0,
       };
+      if (scheduleType === 'scheduled' && scheduledDate && scheduledTime) {
+        draftData.scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+      }
       if (!isAutomationMode && latestDraft.segmentId) {
         draftData.segmentId = latestDraft.segmentId;
       }
@@ -274,7 +280,12 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         draftData.contentJson = emailContentPayload;
       }
       if (promoCode) draftData.promoCode = promoCode;
-      await saveCampaignDraft(campaignId, draftData);
+      const saveResult = await saveCampaignDraft(campaignId, draftData);
+      if (!saveResult.success) {
+        toast.error(saveResult.error || 'Erreur lors de la sauvegarde du brouillon');
+        setIsSaving(false);
+        return;
+      }
 
       let scheduledAt = undefined;
       if (scheduleType === 'scheduled' && scheduledDate && scheduledTime) {

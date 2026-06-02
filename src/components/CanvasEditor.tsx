@@ -23,12 +23,12 @@ const NODE_COPY: Record<
   NodeType,
   { badge: string; title: string; subtitle: string; tone: NodeTone }
 > = {
-  trigger: { badge: 'Déclencheur', title: 'Trigger', subtitle: 'Nouveau contact', tone: 'trigger' },
-  wait: { badge: 'Attente', title: 'Wait', subtitle: 'Délai', tone: 'wait' },
-  action: { badge: 'Action', title: 'Action', subtitle: 'Envoi message', tone: 'action' },
+  trigger: { badge: 'Déclencheur', title: 'Déclencheur', subtitle: 'Point d’entrée', tone: 'trigger' },
+  wait: { badge: 'Attente', title: 'Attente', subtitle: 'Délai', tone: 'wait' },
+  action: { badge: 'Action', title: 'Action', subtitle: 'Envoi de message', tone: 'action' },
   condition: { badge: 'Condition', title: 'Condition', subtitle: 'Règle', tone: 'condition' },
-  tag: { badge: 'Tag', title: 'Tag', subtitle: 'Segment', tone: 'tag' },
-  end: { badge: 'Fin', title: 'End', subtitle: 'Workflow clôturé', tone: 'end' },
+  tag: { badge: 'Tag', title: 'Tag', subtitle: 'Étiquette', tone: 'tag' },
+  end: { badge: 'Fin', title: 'Fin', subtitle: 'Workflow terminé', tone: 'end' },
 };
 
 const NODE_THEME: Record<NodeTone, string> = {
@@ -41,12 +41,12 @@ const NODE_THEME: Record<NodeTone, string> = {
 };
 
 const NODE_SUBTEXT: Record<NodeType, string> = {
-  trigger: 'Contact ajouté',
-  wait: 'Pause avant action',
-  action: 'Email message',
-  condition: 'A cliqué le lien ?',
+  trigger: 'Nouveau contact ou événement',
+  wait: 'Pause avant l’action',
+  action: 'Message à envoyer',
+  condition: 'Vérification de règle',
   tag: 'Ajouter un tag',
-  end: 'Workflow terminé',
+  end: 'Séquence terminée',
 };
 
 const WAIT_PRESETS = [
@@ -1146,8 +1146,8 @@ export default function CanvasEditor({
                           })
                         }
                       >
-                        <option value="contact_added">Contact ajouté</option>
-                        <option value="api">Intégration externe</option>
+                        <option value="contact_added">Nouveau contact</option>
+                        <option value="api">Événement externe (API / webhook)</option>
                       </select>
                     </div>
                   )}
