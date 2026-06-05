@@ -19,15 +19,8 @@ import { getCampaignDetails } from '@/services/campaignService';
 export const CampaignWizard: FC = () => {
   const { id: campaignId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const {
-    draft,
-    setDraftStep,
-    saveDraft,
-    clearDraft,
-    selectedCampaignId,
-    error,
-    isLoading,
-  } = useCampaignStore();
+  const { draft, setDraftStep, saveDraft, clearDraft, selectedCampaignId, error, isLoading } =
+    useCampaignStore();
 
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
@@ -78,7 +71,13 @@ export const CampaignWizard: FC = () => {
 
     if (draft.channel === 'SMS') {
       const smsMessage = draft.smsContent?.message || '';
-      if (smsMessage) payload.content = smsMessage;
+      if (smsMessage) {
+        // RG-22 : le bloc STOP est obligatoire — on l'ajoute automatiquement si absent
+        const stopCode = draft.stopCode || 'NOVA_PRECISION';
+        const stopSuffix = `\nSTOP au ${stopCode}`;
+        const fullMessage = /\bSTOP\b/i.test(smsMessage) ? smsMessage : smsMessage + stopSuffix;
+        payload.content = fullMessage;
+      }
     }
 
     if (draft.schedule?.timezone) {
@@ -163,7 +162,9 @@ export const CampaignWizard: FC = () => {
         if (!result.success || !result.data) return;
         const campaign = result.data as Record<string, unknown>;
         const contentJson =
-          campaign.contentJson && typeof campaign.contentJson === 'object' && !Array.isArray(campaign.contentJson)
+          campaign.contentJson &&
+          typeof campaign.contentJson === 'object' &&
+          !Array.isArray(campaign.contentJson)
             ? (campaign.contentJson as Record<string, unknown>)
             : undefined;
         useCampaignStore.setState({
@@ -174,13 +175,18 @@ export const CampaignWizard: FC = () => {
               typeof campaign.status === 'string' && campaign.status === 'AUTOMATION'
                 ? 'automation'
                 : 'standard',
-            channel: typeof campaign.channelType === 'string' && campaign.channelType === 'SMS' ? 'SMS' : 'EMAIL',
+            channel:
+              typeof campaign.channelType === 'string' && campaign.channelType === 'SMS'
+                ? 'SMS'
+                : 'EMAIL',
             name: typeof campaign.name === 'string' ? campaign.name : undefined,
-            description: typeof campaign.description === 'string' ? campaign.description : undefined,
+            description:
+              typeof campaign.description === 'string' ? campaign.description : undefined,
             segmentId: typeof campaign.segmentId === 'string' ? campaign.segmentId : undefined,
-            segmentName: typeof (campaign.segment as Record<string, unknown> | undefined)?.name === 'string'
-              ? String((campaign.segment as Record<string, unknown>).name)
-              : undefined,
+            segmentName:
+              typeof (campaign.segment as Record<string, unknown> | undefined)?.name === 'string'
+                ? String((campaign.segment as Record<string, unknown>).name)
+                : undefined,
             emailContent:
               typeof campaign.channelType === 'string' && campaign.channelType === 'EMAIL'
                 ? {
@@ -202,17 +208,15 @@ export const CampaignWizard: FC = () => {
             smsContent:
               typeof campaign.channelType === 'string' && campaign.channelType === 'SMS'
                 ? {
-                    message:
-                      typeof campaign.content === 'string'
-                        ? campaign.content
-                        : '',
+                    message: typeof campaign.content === 'string' ? campaign.content : '',
                     senderName: '',
                     variables: [],
                   }
                 : undefined,
             abTest: campaign.abTest as never,
             schedule: campaign.schedule as never,
-            estimatedRecipients: typeof campaign.estimatedRecipients === 'number' ? campaign.estimatedRecipients : 0,
+            estimatedRecipients:
+              typeof campaign.estimatedRecipients === 'number' ? campaign.estimatedRecipients : 0,
             estimatedCost: typeof campaign.estimatedCost === 'number' ? campaign.estimatedCost : 0,
             promoCode: typeof campaign.promoCode === 'string' ? campaign.promoCode : '',
           },
@@ -309,26 +313,11 @@ export const CampaignWizard: FC = () => {
       case 1:
         return <CampaignChannelStep onNext={handleNext} />;
       case 2:
-        return (
-          <CampaignContentStep
-            onNext={handleNext}
-            onPrev={handlePrev}
-          />
-        );
+        return <CampaignContentStep onNext={handleNext} onPrev={handlePrev} />;
       case 3:
-        return (
-          <CampaignAudienceStep
-            onNext={handleNext}
-            onPrev={handlePrev}
-          />
-        );
+        return <CampaignAudienceStep onNext={handleNext} onPrev={handlePrev} />;
       case 4:
-        return (
-          <CampaignScheduleStep
-            onSubmit={handleSubmit}
-            onPrev={handlePrev}
-          />
-        );
+        return <CampaignScheduleStep onSubmit={handleSubmit} onPrev={handlePrev} />;
       default:
         return null;
     }
@@ -339,9 +328,7 @@ export const CampaignWizard: FC = () => {
       {/* Header */}
       <header className="flex justify-between items-center w-full px-8 h-16 bg-surface border-b border-outline-variant/10 sticky top-0 z-40">
         <div className="flex items-center gap-4">
-          <h1 className="font-headline text-2xl font-bold text-primary">
-            NovaSMS
-          </h1>
+          <h1 className="font-headline text-2xl font-bold text-primary">NovaSMS</h1>
           <div className="h-6 w-[1px] bg-outline-variant/30" />
           <span className="text-sm text-on-surface-variant">
             {draft.name ? `Brouillon: ${draft.name}` : 'Nouvelle campagne'}
@@ -354,11 +341,7 @@ export const CampaignWizard: FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          {error && (
-            <div className="text-error text-sm font-medium">
-              {error}
-            </div>
-          )}
+          {error && <div className="text-error text-sm font-medium">{error}</div>}
           {draftSaved && (
             <div className="flex items-center gap-2 text-success text-sm font-medium">
               <span className="material-symbols-outlined text-lg">check_circle</span>
@@ -384,9 +367,7 @@ export const CampaignWizard: FC = () => {
       </header>
 
       {/* Wizard Content */}
-      <main className="flex-1 py-8">
-        {renderStep()}
-      </main>
+      <main className="flex-1 py-8">{renderStep()}</main>
 
       {/* Discard Confirmation Modal */}
       {confirmDiscard && (
@@ -394,9 +375,7 @@ export const CampaignWizard: FC = () => {
           <div className="bg-surface-container-lowest rounded-xl p-8 max-w-sm w-full mx-4 space-y-6">
             <div className="flex items-center gap-4 text-error">
               <span className="material-symbols-outlined text-4xl">warning</span>
-              <h3 className="font-headline font-bold text-lg">
-                Abandonner la campagne ?
-              </h3>
+              <h3 className="font-headline font-bold text-lg">Abandonner la campagne ?</h3>
             </div>
             <p className="text-on-surface-variant text-sm">
               Que souhaitez-vous faire avec votre campagne en cours ?

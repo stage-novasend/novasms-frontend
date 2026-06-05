@@ -19,16 +19,67 @@ import api from '@/api/axios';
  */
 
 export const EmailEditor: FC = () => {
-  const { draft, setDraftEmailContent, selectedCampaignId } = useCampaignStore();
+  const { draft, setDraftEmailContent, setDraftABTest, selectedCampaignId } = useCampaignStore();
+  const abTest = draft.abTest;
+  const abEnabled = Boolean(abTest?.enabled);
+
+  // Quel onglet est actif : 'main' | 'A' | 'B'
+  const [activeVariant, setActiveVariant] = useState<'main' | 'A' | 'B'>('main');
+
+  // ── Contenu principal ──────────────────────────────────────────────────────
   const [subject, setSubject] = useState(draft.emailContent?.subject || '');
   const [preheader, setPreheader] = useState(draft.emailContent?.preheader || '');
   const [blocks, setBlocks] = useState<CampaignBlock[]>(draft.emailContent?.blocks || []);
+
+  // ── Variante A ─────────────────────────────────────────────────────────────
+  const [subjectA, setSubjectA] = useState(
+    abTest?.variantA?.emailSubject || draft.emailContent?.subject || '',
+  );
+  const [preheaderA, setPreheaderA] = useState(
+    ((abTest?.variantA as Record<string, unknown>)?.emailPreheader as string) ||
+      draft.emailContent?.preheader ||
+      '',
+  );
+  const [blocksA, setBlocksA] = useState<CampaignBlock[]>(
+    ((abTest?.variantA as Record<string, unknown>)?.emailBlocks as CampaignBlock[]) ||
+      draft.emailContent?.blocks ||
+      [],
+  );
+
+  // ── Variante B ─────────────────────────────────────────────────────────────
+  const [subjectB, setSubjectB] = useState(
+    abTest?.variantB?.emailSubject || `${draft.emailContent?.subject || 'Email'} - Variante B`,
+  );
+  const [preheaderB, setPreheaderB] = useState(
+    ((abTest?.variantB as Record<string, unknown>)?.emailPreheader as string) ||
+      draft.emailContent?.preheader ||
+      '',
+  );
+  const [blocksB, setBlocksB] = useState<CampaignBlock[]>(
+    ((abTest?.variantB as Record<string, unknown>)?.emailBlocks as CampaignBlock[]) || [],
+  );
+
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showHtmlImport, setShowHtmlImport] = useState(false);
+  const [htmlImportValue, setHtmlImportValue] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingImageUploadRef = useRef<((uploadedImage: UploadedImage) => void) | null>(null);
   const lastHydratedContentRef = useRef<string>('');
+
+  // ── Accesseurs dynamiques selon l'onglet actif ─────────────────────────────
+  const currentBlocks = activeVariant === 'A' ? blocksA : activeVariant === 'B' ? blocksB : blocks;
+  const setCurrentBlocks =
+    activeVariant === 'A' ? setBlocksA : activeVariant === 'B' ? setBlocksB : setBlocks;
+  const currentSubject =
+    activeVariant === 'A' ? subjectA : activeVariant === 'B' ? subjectB : subject;
+  const setCurrentSubject =
+    activeVariant === 'A' ? setSubjectA : activeVariant === 'B' ? setSubjectB : setSubject;
+  const currentPreheader =
+    activeVariant === 'A' ? preheaderA : activeVariant === 'B' ? preheaderB : preheader;
+  const setCurrentPreheader =
+    activeVariant === 'A' ? setPreheaderA : activeVariant === 'B' ? setPreheaderB : setPreheader;
 
   const fileToDataUrl = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -41,6 +92,7 @@ export const EmailEditor: FC = () => {
   // Get campaign ID from store (used for image uploads)
   const campaignId = selectedCampaignId;
 
+  // Hydrate principal depuis le store
   useEffect(() => {
     const nextContent = JSON.stringify(draft.emailContent ?? null);
     if (nextContent === lastHydratedContentRef.current) return;
@@ -57,7 +109,9 @@ export const EmailEditor: FC = () => {
     draft.emailContent?.blocks,
   ]);
 
+  // Persistance contenu principal
   useEffect(() => {
+    if (activeVariant !== 'main') return;
     const content = { subject, preheader, blocks };
     try {
       lastHydratedContentRef.current = JSON.stringify(content);
@@ -65,7 +119,37 @@ export const EmailEditor: FC = () => {
     } catch {
       // swallow
     }
-  }, [subject, preheader, blocks, setDraftEmailContent]);
+  }, [subject, preheader, blocks, setDraftEmailContent, activeVariant]);
+
+  // Persistance variante A
+  useEffect(() => {
+    if (!abEnabled) return;
+    setDraftABTest({
+      ...(abTest as NonNullable<typeof abTest>),
+      variantA: {
+        ...(abTest?.variantA ?? {}),
+        emailSubject: subjectA,
+        emailPreheader: preheaderA,
+        emailBlocks: blocksA,
+      } as NonNullable<typeof abTest>['variantA'],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectA, preheaderA, blocksA]);
+
+  // Persistance variante B
+  useEffect(() => {
+    if (!abEnabled) return;
+    setDraftABTest({
+      ...(abTest as NonNullable<typeof abTest>),
+      variantB: {
+        ...(abTest?.variantB ?? {}),
+        emailSubject: subjectB,
+        emailPreheader: preheaderB,
+        emailBlocks: blocksB,
+      } as NonNullable<typeof abTest>['variantB'],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectB, preheaderB, blocksB]);
 
   const handleSave = async () => {
     const content = {
@@ -146,18 +230,17 @@ export const EmailEditor: FC = () => {
 
   const handleAddBlock = (type: CampaignBlock['type']) => {
     const newBlock = createBlockByType(type);
-
-    setBlocks([...blocks, newBlock]);
+    setCurrentBlocks([...currentBlocks, newBlock]);
     setSelectedBlockId(newBlock.id);
   };
 
   const handleRemoveBlock = (id: string) => {
-    setBlocks(blocks.filter((b) => b.id !== id));
+    setCurrentBlocks(currentBlocks.filter((b) => b.id !== id));
     setSelectedBlockId(null);
   };
 
   const handleUpdateBlock = (id: string, content: Record<string, unknown>) => {
-    setBlocks(blocks.map((b) => (b.id === id ? { ...b, content } : b)));
+    setCurrentBlocks(currentBlocks.map((b) => (b.id === id ? { ...b, content } : b)));
   };
 
   const getContentText = (content: Record<string, unknown>): string => {
@@ -166,7 +249,7 @@ export const EmailEditor: FC = () => {
   };
 
   const handleInsertVariable = (variable: string) => {
-    const block = blocks.find((b) => b.id === selectedBlockId);
+    const block = currentBlocks.find((b) => b.id === selectedBlockId);
     if (block && block.type === 'text') {
       handleUpdateBlock(block.id, {
         text: `${getContentText(block.content)}${variable}`,
@@ -388,6 +471,39 @@ export const EmailEditor: FC = () => {
         disabled={isUploadingImage}
         className="hidden"
       />
+
+      {/* ── Onglets A/B Test (si actif) ─────────────────────────────────────── */}
+      {abEnabled && (
+        <div className="lg:col-span-12">
+          <div className="flex items-center gap-1 bg-surface-container-low rounded-2xl p-1 border border-outline-variant/20 w-fit">
+            {(['main', 'A', 'B'] as const).map((v) => {
+              const label =
+                v === 'main' ? '📧 Email principal' : v === 'A' ? '🅰 Version A' : '🅱 Version B';
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => {
+                    setActiveVariant(v);
+                    setSelectedBlockId(null);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                    activeVariant === v
+                      ? 'bg-primary text-on-primary shadow-sm'
+                      : 'text-on-surface-variant hover:bg-surface-container'
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+            <span className="ml-2 text-xs font-semibold text-on-surface-variant border-l border-outline-variant/30 pl-2">
+              Test A/B activé — éditez chaque variante séparément
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Left: Content Blocks Panel */}
       <aside className="lg:col-span-3 space-y-8">
         {/* Block Tools */}
@@ -461,6 +577,52 @@ export const EmailEditor: FC = () => {
               ))}
           </div>
         </div>
+
+        {/* Import HTML custom */}
+        <div className="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/10 space-y-4">
+          <button
+            type="button"
+            onClick={() => setShowHtmlImport((v) => !v)}
+            className="w-full flex items-center justify-between text-label-sm font-bold uppercase tracking-widest text-on-surface-variant"
+          >
+            <span>Importer HTML</span>
+            <span className="material-symbols-outlined text-sm">
+              {showHtmlImport ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+          {showHtmlImport && (
+            <div className="space-y-3">
+              <textarea
+                rows={6}
+                placeholder="Collez votre HTML email ici..."
+                value={htmlImportValue}
+                onChange={(e) => setHtmlImportValue(e.target.value)}
+                className="w-full bg-surface-container border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-lg px-3 py-2 font-mono text-xs text-on-surface resize-none"
+              />
+              <button
+                type="button"
+                disabled={!htmlImportValue.trim()}
+                onClick={() => {
+                  const newBlock: CampaignBlock = {
+                    id: `html-import-${Date.now()}`,
+                    type: 'html',
+                    content: { html: htmlImportValue.trim() },
+                  };
+                  setCurrentBlocks((prev) => [...prev, newBlock]);
+                  setSelectedBlockId(newBlock.id);
+                  setHtmlImportValue('');
+                  setShowHtmlImport(false);
+                }}
+                className="w-full py-2.5 bg-primary/10 text-primary font-bold rounded-lg text-sm hover:bg-primary hover:text-on-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Insérer comme bloc HTML
+              </button>
+              <p className="text-[11px] text-on-surface-variant">
+                Le HTML sera inséré en tant que bloc indépendant dans l'éditeur.
+              </p>
+            </div>
+          )}
+        </div>
       </aside>
 
       {/* Center: Editor */}
@@ -469,12 +631,12 @@ export const EmailEditor: FC = () => {
         <div className="bg-surface-container-lowest rounded-2xl p-8 border border-outline-variant/10 space-y-6">
           <div className="space-y-3">
             <label className="block text-label-sm font-bold uppercase tracking-widest text-on-surface-variant">
-              Ligne d'objet
+              Ligne d&apos;objet
             </label>
             <input
               type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              value={currentSubject}
+              onChange={(e) => setCurrentSubject(e.target.value)}
               placeholder="Sujet accrocheur..."
               maxLength={120}
               className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3 font-body text-on-surface transition-all"
@@ -486,8 +648,8 @@ export const EmailEditor: FC = () => {
             </label>
             <input
               type="text"
-              value={preheader}
-              onChange={(e) => setPreheader(e.target.value)}
+              value={currentPreheader}
+              onChange={(e) => setCurrentPreheader(e.target.value)}
               placeholder="Texte visible avant d'ouvrir..."
               maxLength={100}
               className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3 font-body text-on-surface transition-all"
@@ -497,12 +659,12 @@ export const EmailEditor: FC = () => {
 
         {/* Canvas */}
         <div className="bg-surface-container-low rounded-2xl p-8 shadow-lg space-y-4 min-h-[400px]">
-          {blocks.length === 0 ? (
+          {currentBlocks.length === 0 ? (
             <div className="text-center py-12 text-on-surface-variant">
               <p className="text-sm">Cliquez sur un bloc à gauche pour commencer</p>
             </div>
           ) : (
-            blocks.map((block) => (
+            currentBlocks.map((block) => (
               <div
                 key={block.id}
                 onClick={() => setSelectedBlockId(block.id)}
@@ -1716,9 +1878,9 @@ export const EmailEditor: FC = () => {
         <MobilePreview
           type="email"
           emailContent={{
-            subject,
-            preheader,
-            blocks,
+            subject: currentSubject,
+            preheader: currentPreheader,
+            blocks: currentBlocks,
           }}
         />
       </div>

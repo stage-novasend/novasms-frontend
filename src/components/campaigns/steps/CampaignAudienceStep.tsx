@@ -4,6 +4,7 @@ import { useCampaignStore } from '@/store/campaign.store';
 import { contactsApi } from '@/api/contacts';
 import { getSegmentContactCount } from '@/services/campaignService';
 import type { DynamicSegment } from '@/features/contacts/types/contact';
+import SegmentBuilder from '@/components/segments/SegmentBuilder';
 
 interface CampaignAudienceStepProps {
   onNext: () => void;
@@ -22,33 +23,34 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
   const [loading, setLoading] = useState(true);
   const [contactCounts, setContactCounts] = useState<Record<string, number>>({});
   const [loadingCounts, setLoadingCounts] = useState<Set<string>>(new Set());
+  const [showBuilder, setShowBuilder] = useState(false);
+
+  const loadSegments = async () => {
+    try {
+      console.log('📡 Fetching segments from API...');
+      const data = await contactsApi.listSegments();
+      console.log('✅ Raw API response:', data);
+      console.log('✅ Response type:', typeof data);
+      console.log('✅ Is array?:', Array.isArray(data));
+
+      if (!Array.isArray(data)) {
+        console.warn('⚠️ Response is not an array, got:', data);
+        setSegments([]);
+      } else {
+        console.log('✅ Segments loaded successfully:', data.length, 'items');
+        setSegments(data as DynamicSegment[]);
+      }
+    } catch (error) {
+      console.error('❌ Error loading segments:', error);
+      console.error('❌ Error type:', error instanceof Error ? error.message : String(error));
+      setSegments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Load segments from API using proper API client
   useEffect(() => {
-    const loadSegments = async () => {
-      try {
-        console.log('📡 Fetching segments from API...');
-        const data = await contactsApi.listSegments();
-        console.log('✅ Raw API response:', data);
-        console.log('✅ Response type:', typeof data);
-        console.log('✅ Is array?:', Array.isArray(data));
-
-        if (!Array.isArray(data)) {
-          console.warn('⚠️ Response is not an array, got:', data);
-          setSegments([]);
-        } else {
-          console.log('✅ Segments loaded successfully:', data.length, 'items');
-          setSegments(data as DynamicSegment[]);
-        }
-      } catch (error) {
-        console.error('❌ Error loading segments:', error);
-        console.error('❌ Error type:', error instanceof Error ? error.message : String(error));
-        setSegments([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadSegments();
   }, []);
 
@@ -95,33 +97,46 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
         <div className="flex justify-center">
           <div className="flex items-center gap-4 w-full">
             <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
-              <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">✓</span>
-              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">Canal</span>
+              <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">
+                ✓
+              </span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">
+                Canal
+              </span>
             </div>
             <div className="w-20 h-[2px] bg-primary/40" />
             <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
-              <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">✓</span>
-              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">Contenu</span>
+              <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">
+                ✓
+              </span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">
+                Contenu
+              </span>
             </div>
             <div className="w-20 h-[2px] bg-primary/40" />
             <div className="flex flex-col items-center gap-2 flex-1 text-primary">
-              <span className="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-sm text-on-primary shadow-lg shadow-primary/20">3</span>
+              <span className="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-sm text-on-primary shadow-lg shadow-primary/20">
+                3
+              </span>
               <span className="text-xs font-bold uppercase hidden sm:inline">Audience</span>
             </div>
             <div className="w-20 h-[2px] bg-outline-variant/30" />
             <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
-              <span className="w-10 h-10 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-sm">4</span>
-              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">Planif.</span>
+              <span className="w-10 h-10 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-sm">
+                4
+              </span>
+              <span className="text-xs font-bold text-on-surface-variant uppercase hidden sm:inline">
+                Planif.
+              </span>
             </div>
           </div>
         </div>
 
         <div className="text-center space-y-4">
-          <h2 className="text-4xl font-headline font-bold text-on-surface">
-            Audience facultative
-          </h2>
+          <h2 className="text-4xl font-headline font-bold text-on-surface">Audience facultative</h2>
           <p className="text-on-surface-variant max-w-2xl mx-auto">
-            Cette campagne est en mode automatisé. Vous pouvez personnaliser le contenu, mais aucun segment n'est requis.
+            Cette campagne est en mode automatisé. Vous pouvez personnaliser le contenu, mais aucun
+            segment n'est requis.
           </p>
         </div>
 
@@ -230,6 +245,38 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
           Choisissez un segment de contacts pour cibler votre campagne. Le nombre de destinataires
           est calculé en temps réel depuis votre base de données.
         </p>
+      </div>
+
+      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-[11px] font-bold text-primary uppercase tracking-widest">
+              Créer un segment
+            </p>
+            <h3 className="font-headline font-bold text-xl text-on-surface mt-1">
+              Segment Builder branché au wizard
+            </h3>
+            <p className="text-sm text-on-surface-variant mt-2">
+              Créez un segment sans quitter le flow, puis rechargez la liste automatiquement.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowBuilder((current) => !current)}
+            className="px-4 py-2 rounded-lg bg-primary text-on-primary font-bold text-sm hover:brightness-110 transition-colors"
+          >
+            {showBuilder ? 'Masquer' : 'Créer un segment'}
+          </button>
+        </div>
+
+        {showBuilder && (
+          <SegmentBuilder
+            onCreated={async () => {
+              setShowBuilder(false);
+              setLoading(true);
+              await loadSegments();
+            }}
+          />
+        )}
       </div>
 
       {/* Segments Grid */}

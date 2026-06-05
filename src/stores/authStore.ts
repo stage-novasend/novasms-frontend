@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import api from '@/api/axios';
 
 export type User = {
   id: string;
@@ -178,6 +179,10 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // US-015: call backend to revoke JWT token immediately via Redis blacklist
+        api.post('/auth/logout').catch(() => {
+          /* fail-silent: token expires naturally */
+        });
         set({
           user: null,
           accessToken: null,

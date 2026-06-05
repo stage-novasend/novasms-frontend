@@ -23,7 +23,12 @@ const NODE_COPY: Record<
   NodeType,
   { badge: string; title: string; subtitle: string; tone: NodeTone }
 > = {
-  trigger: { badge: 'Déclencheur', title: 'Déclencheur', subtitle: 'Point d’entrée', tone: 'trigger' },
+  trigger: {
+    badge: 'Déclencheur',
+    title: 'Déclencheur',
+    subtitle: 'Point d’entrée',
+    tone: 'trigger',
+  },
   wait: { badge: 'Attente', title: 'Attente', subtitle: 'Délai', tone: 'wait' },
   action: { badge: 'Action', title: 'Action', subtitle: 'Envoi de message', tone: 'action' },
   condition: { badge: 'Condition', title: 'Condition', subtitle: 'Règle', tone: 'condition' },
@@ -64,10 +69,14 @@ const TAG_OPTIONS = ['VIP', 'Lead chaud', 'Nouveau client', 'Relance', 'Newslett
 const RETRY_ATTEMPTS = [1, 2, 3, 4, 5] as const;
 
 const normalizeCampaignStatus = (status: string | null | undefined) =>
-  String(status ?? '').trim().toLowerCase();
+  String(status ?? '')
+    .trim()
+    .toLowerCase();
 
 const normalizeCampaignChannel = (value: unknown) =>
-  String(value ?? '').trim().toUpperCase();
+  String(value ?? '')
+    .trim()
+    .toUpperCase();
 
 function cloneState(nodes: Node[], edges: Edge[]) {
   return { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) };
@@ -77,8 +86,10 @@ function normalizeWorkflowNode(rawNode: WorkflowNodeLike): Node | null {
   if (!rawNode?.id) return null;
 
   const position = rawNode.position ?? {};
-  const x = typeof rawNode.x === 'number' ? rawNode.x : typeof position.x === 'number' ? position.x : 0;
-  const y = typeof rawNode.y === 'number' ? rawNode.y : typeof position.y === 'number' ? position.y : 0;
+  const x =
+    typeof rawNode.x === 'number' ? rawNode.x : typeof position.x === 'number' ? position.x : 0;
+  const y =
+    typeof rawNode.y === 'number' ? rawNode.y : typeof position.y === 'number' ? position.y : 0;
 
   return {
     id: rawNode.id,
@@ -131,6 +142,10 @@ export default function CanvasEditor({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const dragPointerId = useRef<number | null>(null);
+  // Seuil de drag : position initiale du pointer pour détecter un vrai glisser (≥5px)
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+  // Référence à l'élément qui a setPointerCapture (pour releasePointerCapture explicite)
+  const dragCaptureEl = useRef<Element | null>(null);
   const panRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(
     null,
   );
@@ -173,8 +188,12 @@ export default function CanvasEditor({
           : wf.edges && typeof wf.edges === 'object'
             ? Object.values(wf.edges as Record<string, WorkflowEdgeLike>)
             : [];
-        const nextNodes = rawNodes.map((node) => normalizeWorkflowNode(node)).filter(Boolean) as Node[];
-        const nextEdges = rawEdges.map((edge) => normalizeWorkflowEdge(edge)).filter(Boolean) as Edge[];
+        const nextNodes = rawNodes
+          .map((node) => normalizeWorkflowNode(node))
+          .filter(Boolean) as Node[];
+        const nextEdges = rawEdges
+          .map((edge) => normalizeWorkflowEdge(edge))
+          .filter(Boolean) as Edge[];
         setNodes(nextNodes);
         setEdges(nextEdges);
         history.current = [cloneState(nextNodes, nextEdges)];
@@ -215,24 +234,18 @@ export default function CanvasEditor({
   const onPointerDownNode = useCallback(
     (e: React.PointerEvent, node: Node) => {
       if (connectFrom) return;
+      // Ne PAS setPointerCapture ici : on attend le seuil de mouvement (5px)
+      // pour distinguer un clic de sélection d'un vrai glisser-déposer
+      dragPointerId.current = e.pointerId;
+      dragStartPos.current = { x: e.clientX, y: e.clientY };
+      dragCaptureEl.current = null;
       const targetRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       dragRef.current = {
         id: node.id,
         offsetX: e.clientX - targetRect.left,
         offsetY: e.clientY - targetRect.top,
       };
-      dragPointerId.current = e.pointerId;
-      (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      setDraggingNodeId(node.id);
-      setNodes((current) => {
-        const index = current.findIndex((item) => item.id === node.id);
-        if (index === -1) return current;
-        const next = [...current];
-        const moved = next.splice(index, 1)[0];
-        if (!moved) return current;
-        next.push(moved);
-        return next;
-      });
+      // Sélection immédiate (sans capture) → l'inspecteur s'affiche
       setSelectedNodeId(node.id);
       setEditingNodeId(null);
     },
@@ -248,6 +261,33 @@ export default function CanvasEditor({
       }
       if (!dragRef.current) return;
       const dragState = dragRef.current;
+
+      // Seuil 5px : n'activer le glisser qu'après un mouvement minimal
+      if (!draggingNodeId && dragStartPos.current) {
+        const dx = e.clientX - dragStartPos.current.x;
+        const dy = e.clientY - dragStartPos.current.y;
+        if (Math.hypot(dx, dy) < 5) return; // Pas encore assez de mouvement → clic simple
+
+        // Seuil atteint : activer le drag + pointer capture
+        const nodeEl = document.querySelector(`[data-node-id="${dragState.id}"]`);
+        if (nodeEl && dragPointerId.current !== null) {
+          nodeEl.setPointerCapture(dragPointerId.current);
+          dragCaptureEl.current = nodeEl;
+        }
+        setDraggingNodeId(dragState.id);
+        document.body.style.cursor = 'grabbing';
+        setNodes((current) => {
+          const index = current.findIndex((item) => item.id === dragState.id);
+          if (index === -1) return current;
+          const next = [...current];
+          const moved = next.splice(index, 1)[0];
+          if (!moved) return current;
+          next.push(moved);
+          return next;
+        });
+      }
+
+      if (!draggingNodeId) return; // Pas encore en mode drag
       const canvasRect = canvasRef.current?.getBoundingClientRect();
       if (!canvasRect) return;
       const rawX = (e.clientX - canvasRect.left) / zoom - dragState.offsetX;
@@ -257,17 +297,28 @@ export default function CanvasEditor({
       const nextY = snap(rawY);
       setNodes((cur) => cur.map((n) => (n.id === dragState.id ? { ...n, x: nextX, y: nextY } : n)));
     },
-    [zoom],
+    [zoom, draggingNodeId],
   );
 
   const onPointerUp = useCallback(() => {
     if (dragRef.current) {
       pushHistory(nodes, edges);
     }
+    // Libération explicite du pointer capture pour éviter que le curseur reste bloqué
+    if (dragCaptureEl.current && dragPointerId.current !== null) {
+      try {
+        dragCaptureEl.current.releasePointerCapture(dragPointerId.current);
+      } catch {
+        /* ignore */
+      }
+      dragCaptureEl.current = null;
+    }
     dragRef.current = null;
+    dragStartPos.current = null;
     panRef.current = null;
     dragPointerId.current = null;
     setDraggingNodeId(null);
+    document.body.style.cursor = ''; // Remettre le curseur par défaut
   }, [nodes, edges, pushHistory]);
 
   useEffect(() => {
@@ -574,9 +625,13 @@ export default function CanvasEditor({
   );
 
   const campaignOptions = useMemo(() => {
-    const currentChannel = normalizeCampaignChannel(selectedNode?.config?.channel || automation?.channel || 'Email');
+    const currentChannel = normalizeCampaignChannel(
+      selectedNode?.config?.channel || automation?.channel || 'Email',
+    );
     const filtered = campaigns.filter((campaign) => {
-      const campaignChannel = normalizeCampaignChannel((campaign as any).channelType || (campaign as any).channel);
+      const campaignChannel = normalizeCampaignChannel(
+        (campaign as any).channelType || (campaign as any).channel,
+      );
       return campaignChannel === currentChannel;
     });
 
@@ -585,8 +640,12 @@ export default function CanvasEditor({
     );
 
     return {
-      automation: sorted.filter((campaign) => normalizeCampaignStatus((campaign as any).status) === 'automation'),
-      classic: sorted.filter((campaign) => normalizeCampaignStatus((campaign as any).status) !== 'automation'),
+      automation: sorted.filter(
+        (campaign) => normalizeCampaignStatus((campaign as any).status) === 'automation',
+      ),
+      classic: sorted.filter(
+        (campaign) => normalizeCampaignStatus((campaign as any).status) !== 'automation',
+      ),
     };
   }, [campaigns, selectedNode?.config?.channel, automation?.channel]);
 
@@ -599,7 +658,8 @@ export default function CanvasEditor({
   }, [selectedWorkflow]);
 
   const minimapNodes = useMemo(() => {
-    if (nodes.length === 0) return [] as Array<{ id: string; x: number; y: number; tone: NodeTone }>;
+    if (nodes.length === 0)
+      return [] as Array<{ id: string; x: number; y: number; tone: NodeTone }>;
     const minX = Math.min(...nodes.map((node) => node.x));
     const maxX = Math.max(...nodes.map((node) => node.x + 220));
     const minY = Math.min(...nodes.map((node) => node.y));
@@ -796,7 +856,9 @@ export default function CanvasEditor({
           <aside className="border-r border-outline-variant/30 bg-white p-4">
             <div className="mb-4 rounded-2xl border border-outline-variant/30 bg-surface/40 p-3 text-xs text-on-surface-variant">
               <p className="font-semibold text-secondary">Aide rapide</p>
-              <p className="mt-1">1) Ajoutez les nœuds. 2) Cliquez “Lier flèche”. 3) Connectez source puis cible.</p>
+              <p className="mt-1">
+                1) Ajoutez les nœuds. 2) Cliquez “Lier flèche”. 3) Connectez source puis cible.
+              </p>
               <p className="mt-1">Double-cliquez sur un titre pour renommer un nœud.</p>
             </div>
 
@@ -951,6 +1013,7 @@ export default function CanvasEditor({
                     return (
                       <div
                         key={node.id}
+                        data-node-id={node.id}
                         style={{
                           left: node.x,
                           top: node.y,
@@ -958,9 +1021,8 @@ export default function CanvasEditor({
                             draggingNodeId === node.id ? 40 : selectedNodeId === node.id ? 20 : 10,
                           touchAction: 'none',
                         }}
-                        className={`absolute w-[220px] select-none rounded-2xl border px-4 py-3 overflow-visible ${NODE_THEME[copy.tone]} ${selectedNodeId === node.id ? 'ring-2 ring-primary' : ''} cursor-grab active:cursor-grabbing`}
+                        className={`absolute w-[220px] select-none rounded-2xl border px-4 py-3 overflow-visible ${NODE_THEME[copy.tone]} ${selectedNodeId === node.id ? 'ring-2 ring-primary' : ''} ${draggingNodeId === node.id ? 'cursor-grabbing' : 'cursor-grab'}`}
                         onPointerDown={(e) => onPointerDownNode(e, node)}
-                        onPointerUp={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (linkMode || connectFrom) {
@@ -1206,7 +1268,8 @@ export default function CanvasEditor({
                           )}
                         </select>
                         <p className="mt-1 text-[11px] text-on-surface-variant">
-                          La campagne automatique reste mise en avant, mais les campagnes classiques restent visibles.
+                          La campagne automatique reste mise en avant, mais les campagnes classiques
+                          restent visibles.
                         </p>
                       </div>
 
@@ -1220,7 +1283,7 @@ export default function CanvasEditor({
                           onChange={(event) =>
                             updateNodeConfig(selectedNode.id, { templateId: event.target.value })
                           }
-                          placeholder="uuid-template"
+                          placeholder="Identifiant du modèle"
                         />
                       </div>
                       <div>
@@ -1264,9 +1327,7 @@ export default function CanvasEditor({
 
                   {selectedNode.type === 'tag' && (
                     <div className="rounded-2xl border border-outline-variant/30 bg-white p-3">
-                      <label className="text-xs font-semibold text-on-surface-variant">
-                        Mode
-                      </label>
+                      <label className="text-xs font-semibold text-on-surface-variant">Mode</label>
                       <select
                         className="mt-2 w-full rounded-xl border border-outline-variant/40 px-3 py-2 text-sm text-secondary outline-none"
                         value={selectedNode.config?.tagMode || 'add'}
@@ -1346,7 +1407,7 @@ export default function CanvasEditor({
                             onChange={(event) =>
                               updateNodeConfig(selectedNode.id, { campaignId: event.target.value })
                             }
-                            placeholder="uuid-campagne"
+                            placeholder="Identifiant de la campagne"
                           />
                         </div>
                       )}

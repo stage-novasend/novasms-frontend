@@ -35,7 +35,7 @@ export interface CampaignDraft {
   description?: string;
   segmentId?: string;
   segmentName?: string; // Track segment name for display
-    promoCode?: string; // EN-1688: Personalization variable
+  promoCode?: string; // EN-1688: Personalization variable
   emailContent?: EmailContent;
   smsContent?: SMSContent;
   abTest?: ABTestConfig;
@@ -65,7 +65,11 @@ interface CampaignStore {
   updateEstimates: (recipients: number, cost: number) => void;
 
   // Actions: Campaign CRUD
-  createCampaign: (campaign: Omit<Campaign, 'id' | 'createdAt' | 'updatedAt' | 'segmentId'> & { segmentId?: string }) => Promise<Campaign>;
+  createCampaign: (
+    campaign: Omit<Campaign, 'id' | 'createdAt' | 'updatedAt' | 'segmentId'> & {
+      segmentId?: string;
+    },
+  ) => Promise<Campaign>;
   updateCampaign: (id: string, updates: Partial<Campaign>) => Promise<Campaign>;
   deleteCampaign: (id: string) => Promise<void>;
   duplicateCampaign: (id: string) => Promise<Campaign>;
@@ -160,11 +164,8 @@ const normalizeEmailContent = (response: Record<string, unknown>): EmailContent 
         : typeof response.subject === 'string'
           ? response.subject
           : '',
-    preheader:
-      typeof contentJson.preheader === 'string' ? contentJson.preheader : '',
-    blocks: Array.isArray(contentJson.blocks)
-      ? (contentJson.blocks as CampaignBlock[])
-      : [],
+    preheader: typeof contentJson.preheader === 'string' ? contentJson.preheader : '',
+    blocks: Array.isArray(contentJson.blocks) ? (contentJson.blocks as CampaignBlock[]) : [],
   };
 };
 
@@ -187,9 +188,45 @@ const normalizeSmsContent = (response: Record<string, unknown>): SMSContent | un
   };
 };
 
+const normalizeABTest = (response: Record<string, unknown>): ABTestConfig | undefined => {
+  if (response.abTest && typeof response.abTest === 'object' && !Array.isArray(response.abTest)) {
+    return response.abTest as ABTestConfig;
+  }
+
+  const contentJson = asRecord(response.contentJson);
+  const abTestConfig = asRecord(contentJson?.abTestConfig);
+  if (!abTestConfig) return undefined;
+
+  const variantA = asRecord(abTestConfig.variantA);
+  const variantB = asRecord(abTestConfig.variantB);
+
+  return {
+    enabled: Boolean(abTestConfig.enabled),
+    splitRatio: typeof abTestConfig.splitRatio === 'number' ? abTestConfig.splitRatio : 20,
+    variantA: {
+      emailSubject: typeof variantA?.emailSubject === 'string' ? variantA.emailSubject : undefined,
+      smsMessage: typeof variantA?.smsMessage === 'string' ? variantA.smsMessage : undefined,
+      emailHtml: typeof variantA?.emailHtml === 'string' ? variantA.emailHtml : undefined,
+      templateId: typeof variantA?.templateId === 'string' ? variantA.templateId : undefined,
+    },
+    variantB: {
+      emailSubject: typeof variantB?.emailSubject === 'string' ? variantB.emailSubject : undefined,
+      smsMessage: typeof variantB?.smsMessage === 'string' ? variantB.smsMessage : undefined,
+      emailHtml: typeof variantB?.emailHtml === 'string' ? variantB.emailHtml : undefined,
+      templateId: typeof variantB?.templateId === 'string' ? variantB.templateId : undefined,
+    },
+    winnerCriteria:
+      abTestConfig.winnerCriteria === 'click_rate' ||
+      abTestConfig.winnerCriteria === 'conversion' ||
+      abTestConfig.winnerCriteria === 'open_rate'
+        ? abTestConfig.winnerCriteria
+        : 'open_rate',
+    autoEvaluate: Boolean(abTestConfig.autoEvaluate),
+  };
+};
+
 const mapApiCampaignToModel = (raw: unknown): Campaign => {
-  const response =
-    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const response = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
 
   const scheduleRaw =
     response.schedule && typeof response.schedule === 'object'
@@ -210,13 +247,9 @@ const mapApiCampaignToModel = (raw: unknown): Campaign => {
     id: typeof response.id === 'string' ? response.id : '',
     accountId: typeof response.accountId === 'string' ? response.accountId : '',
     name: typeof response.name === 'string' ? response.name : 'Campagne',
-    description:
-      typeof response.description === 'string' ? response.description : undefined,
+    description: typeof response.description === 'string' ? response.description : undefined,
     channel: normalizeChannel(response.channel || response.channelType),
-    status:
-      typeof response.status === 'string'
-        ? normalizeStatus(response.status)
-        : 'draft',
+    status: typeof response.status === 'string' ? normalizeStatus(response.status) : 'draft',
     segmentId: typeof response.segmentId === 'string' ? response.segmentId : '',
     segmentName:
       typeof segment?.name === 'string'
@@ -226,15 +259,12 @@ const mapApiCampaignToModel = (raw: unknown): Campaign => {
           : undefined,
     emailContent: normalizeEmailContent(response),
     smsContent: normalizeSmsContent(response),
-    abTest: response.abTest as ABTestConfig | undefined,
+    abTest: normalizeABTest(response),
     schedule:
       scheduleRaw && scheduleType
         ? {
             type: scheduleType,
-            timezone:
-              typeof scheduleRaw.timezone === 'string'
-                ? scheduleRaw.timezone
-                : undefined,
+            timezone: typeof scheduleRaw.timezone === 'string' ? scheduleRaw.timezone : undefined,
             scheduledAt:
               typeof scheduleRaw.scheduledAt === 'string'
                 ? new Date(scheduleRaw.scheduledAt)
@@ -242,23 +272,11 @@ const mapApiCampaignToModel = (raw: unknown): Campaign => {
           }
         : undefined,
     estimatedRecipients:
-      typeof response.estimatedRecipients === 'number'
-        ? response.estimatedRecipients
-        : 0,
-    estimatedCost:
-      typeof response.estimatedCost === 'number' ? response.estimatedCost : 0,
-    createdAt:
-      typeof response.createdAt === 'string'
-        ? new Date(response.createdAt)
-        : new Date(),
-    updatedAt:
-      typeof response.updatedAt === 'string'
-        ? new Date(response.updatedAt)
-        : new Date(),
-    sentAt:
-      typeof response.sentAt === 'string'
-        ? new Date(response.sentAt)
-        : undefined,
+      typeof response.estimatedRecipients === 'number' ? response.estimatedRecipients : 0,
+    estimatedCost: typeof response.estimatedCost === 'number' ? response.estimatedCost : 0,
+    createdAt: typeof response.createdAt === 'string' ? new Date(response.createdAt) : new Date(),
+    updatedAt: typeof response.updatedAt === 'string' ? new Date(response.updatedAt) : new Date(),
+    sentAt: typeof response.sentAt === 'string' ? new Date(response.sentAt) : undefined,
     analytics: response.analytics as Campaign['analytics'],
   };
 };
@@ -374,7 +392,7 @@ export const useCampaignStore = create<CampaignStore>()(
           const payload: CampaignAPIUpdateRequest = {
             name: updates.name || campaign.name,
             description: updates.description || campaign.description,
-             channelType: (updates.channel || campaign.channel) as ('SMS' | 'EMAIL'),
+            channelType: (updates.channel || campaign.channel) as 'SMS' | 'EMAIL',
             segmentId: updates.segmentId || campaign.segmentId,
             emailContent: updates.emailContent || campaign.emailContent,
             smsContent: updates.smsContent || campaign.smsContent,
@@ -458,8 +476,7 @@ export const useCampaignStore = create<CampaignStore>()(
           );
           set({ campaigns, isLoading: false });
         } catch (error) {
-          const message =
-            error instanceof Error ? error.message : 'Chargement impossible';
+          const message = error instanceof Error ? error.message : 'Chargement impossible';
           set({ isLoading: false, error: message });
         }
       },

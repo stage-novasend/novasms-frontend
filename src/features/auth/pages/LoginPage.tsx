@@ -16,7 +16,7 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const navigate = useNavigate();
   // ✅ Ajouter isFirstLogin dans le destructuring
-  const { login, error, clearError, isLoading, isFirstLogin } = useAuthStore();
+  const { login, error, clearError, isLoading } = useAuthStore();
 
   const [formData, setFormData] = useState<LoginFormData>({ email: '', motDePasse: '' });
   const [errors, setErrors] = useState<Partial<LoginFormData>>({});
@@ -50,12 +50,7 @@ export default function LoginPage() {
     const success = await login(formData.email, formData.motDePasse);
 
     if (success) {
-      // ✅ REDIRECTION CONDITIONNELLE : Wizard si première connexion, sinon Dashboard
-      if (isFirstLogin) {
-        navigate('/onboarding');
-      } else {
-        navigate('/dashboard');
-      }
+      navigate('/dashboard');
     }
   };
 

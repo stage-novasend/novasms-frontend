@@ -19,21 +19,32 @@ export default function Login() {
     requiresTwoFactor,
     twoFactorToken,
     twoFactorMessage,
-    logout,
   } = useAuthStore();
 
+  // Effacer l'état local au montage de Login (sans appel API, pour éviter une boucle)
   useEffect(() => {
-    logout();
-  }, [logout]);
+    // On utilise getState() directement pour ne pas déclencher l'intercepteur axios
+    const store = useAuthStore.getState();
+    store.user === null || store.accessToken === null
+      ? undefined // déjà déconnecté
+      : useAuthStore.setState({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          error: null,
+          requiresTwoFactor: false,
+          twoFactorToken: null,
+          twoFactorMessage: null,
+          pendingRememberMe: false,
+          isFirstLogin: false,
+          rememberMe: false,
+          sessionExpiresAt: null,
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const redirectAfterAuth = () => {
-    const { isFirstLogin } = useAuthStore.getState();
-
-    if (isFirstLogin) {
-      navigate('/onboarding');
-      return;
-    }
-
     navigate('/dashboard');
   };
 
@@ -87,36 +98,49 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" aria-label="Formulaire de connexion">
             <div>
-              <label className="block text-sm font-semibold text-on-surface mb-1">
+              <label
+                htmlFor="login-email"
+                className="block text-sm font-semibold text-on-surface mb-1"
+              >
                 Email professionnel
               </label>
               <input
+                id="login-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                 placeholder="contact@boutique.ci"
+                autoComplete="email"
+                aria-required="true"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-on-surface mb-1">
+              <label
+                htmlFor="login-password"
+                className="block text-sm font-semibold text-on-surface mb-1"
+              >
                 Mot de passe
               </label>
               <div className="relative">
                 <input
+                  id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all pr-10"
                   placeholder="••••••••"
+                  autoComplete="current-password"
+                  aria-required="true"
                   required
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary"
                 >

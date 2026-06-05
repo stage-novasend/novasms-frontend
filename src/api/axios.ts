@@ -22,6 +22,16 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const { status } = error.response || {};
+    const url: string = originalRequest?.url ?? '';
+
+    // Ne pas intercepter les appels auth eux-mêmes pour éviter les boucles
+    if (
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/logout') ||
+      url.includes('/auth/login')
+    ) {
+      return Promise.reject(error);
+    }
 
     // Si 401 et pas déjà en train de retry
     if (status === 401 && !originalRequest._retry) {

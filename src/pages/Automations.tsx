@@ -10,10 +10,7 @@ import {
 } from '@/api/automations';
 import { contactsApi } from '@/api/contacts';
 import { campaignApi } from '@/api/campaignApi';
-import type {
-  CampaignAPICreateRequest,
-  CampaignAPIResponse,
-} from '@/types/campaign.types';
+import type { CampaignAPICreateRequest, CampaignAPIResponse } from '@/types/campaign.types';
 import type { Contact, DynamicSegment } from '@/features/contacts/types/contact';
 import CanvasEditor from '@/components/CanvasEditor';
 
@@ -426,7 +423,9 @@ export default function Automations() {
   }, [draft.channel]);
 
   const normalizeCampaignStatus = (status: string | null | undefined) =>
-    String(status ?? '').trim().toLowerCase();
+    String(status ?? '')
+      .trim()
+      .toLowerCase();
 
   const groupedCampaigns = useMemo(() => {
     const sorted = [...campaigns].sort(
@@ -434,7 +433,9 @@ export default function Automations() {
     );
 
     return {
-      automation: sorted.filter((campaign) => normalizeCampaignStatus(campaign.status) === 'automation'),
+      automation: sorted.filter(
+        (campaign) => normalizeCampaignStatus(campaign.status) === 'automation',
+      ),
       classic: [],
     };
   }, [campaigns]);
@@ -460,6 +461,17 @@ export default function Automations() {
       conversion,
     };
   }, [selectedAutomation]);
+
+  const activeWorkflows = items.filter(
+    (automation) => normalizeCampaignStatus(automation.status) === 'active',
+  ).length;
+  const draftWorkflows = items.filter(
+    (automation) => normalizeCampaignStatus(automation.status) === 'draft',
+  ).length;
+  const inactiveWorkflows = items.filter(
+    (automation) => normalizeCampaignStatus(automation.status) === 'inactive',
+  ).length;
+  const totalSent = items.reduce((sum, automation) => sum + (automation.sendCount || 0), 0);
 
   const previewNodes = useMemo(
     () => workflowNodesFromAutomation(selectedAutomation),
@@ -615,7 +627,9 @@ export default function Automations() {
       campaignId: (selectedAutomation as any).campaignId ?? '',
       templateId: selectedAutomation.templateId ?? '',
       triggerConfig: {
-        runAt: toDateTimeLocalValue(getTriggerConfigValue(selectedAutomation.triggerConfig, 'runAt')),
+        runAt: toDateTimeLocalValue(
+          getTriggerConfigValue(selectedAutomation.triggerConfig, 'runAt'),
+        ),
         segmentId: getTriggerConfigValue(selectedAutomation.triggerConfig, 'segmentId'),
         contactId: getTriggerConfigValue(selectedAutomation.triggerConfig, 'contactId'),
       },
@@ -652,9 +666,7 @@ export default function Automations() {
       });
       toast.success('Workflow supprimé');
     } catch (error: any) {
-      const message =
-        error?.response?.data?.message ||
-        'Impossible de supprimer ce workflow';
+      const message = error?.response?.data?.message || 'Impossible de supprimer ce workflow';
       toast.error(String(message));
       console.error(error);
     }
@@ -716,16 +728,38 @@ export default function Automations() {
   };
 
   return (
-    <div className="min-h-full bg-[#f7f9f7] p-4 sm:p-6">
+    <div id="tour-automations-header" className="min-h-full bg-[#f7f9f7] p-4 sm:p-6">
       <div className="mx-auto w-full max-w-[1280px] overflow-hidden rounded-2xl border border-outline-variant/30 bg-white shadow-[0_18px_50px_rgba(12,84,96,0.10)]">
         <div className="flex flex-wrap items-center gap-3 border-b border-outline-variant/30 px-5 py-4">
           <div>
-            <h1 className="text-base font-semibold text-secondary">Automatisations</h1>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant">
+              Orchestration automatisée
+            </p>
+            <h1 className="text-base font-semibold text-secondary">
+              {selectedAutomation ? selectedAutomation.name : 'Automatisations'}
+            </h1>
             <p className="text-xs text-on-surface-variant">
               {selectedAutomation
-                ? `${selectedAutomation.name} · séquence active`
-                : 'Gestion de vos workflows'}
+                ? `${triggerLabel(selectedAutomation.trigger)} · ${selectedAutomation.channel} · ${formatDelay(selectedAutomation.delaySeconds)}`
+                : 'Créez, testez et activez vos workflows visuels'}
             </p>
+          </div>
+
+          <div className="hidden xl:flex items-center gap-3 rounded-full border border-outline-variant/30 bg-surface px-3 py-2">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">
+              Actifs
+            </span>
+            <strong className="text-sm text-secondary">{activeWorkflows}</strong>
+            <span className="h-4 w-px bg-outline-variant/40" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">
+              Brouillons
+            </span>
+            <strong className="text-sm text-secondary">{draftWorkflows}</strong>
+            <span className="h-4 w-px bg-outline-variant/40" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">
+              Inactifs
+            </span>
+            <strong className="text-sm text-secondary">{inactiveWorkflows}</strong>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -865,11 +899,43 @@ export default function Automations() {
                   <strong className="text-primary">{selectedMetrics.conversion.toFixed(1)}%</strong>
                 </p>
               </div>
+
+              <div className="mt-5 rounded-xl border border-outline-variant/30 bg-surface p-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+                  Volume global
+                </p>
+                <p className="mt-2 text-2xl font-bold text-secondary">
+                  {totalSent.toLocaleString('fr-FR')}
+                </p>
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Envois cumulés sur tous les workflows
+                </p>
+              </div>
             </div>
           </aside>
 
           <section className="relative overflow-hidden bg-[#f7f9f7] p-8">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,rgba(12,84,96,0.12)_1px,transparent_1px)] [background-size:24px_24px]" />
+
+            <div className="relative mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-outline-variant/30 bg-white/85 px-4 py-3 shadow-sm backdrop-blur">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+                  Palette workflow
+                </p>
+                <p className="text-sm font-semibold text-secondary">
+                  Déclencheur · Attente · Action · Condition · Tag · Fin
+                </p>
+              </div>
+              <div className="ml-auto flex flex-wrap items-center gap-2 text-[11px] text-on-surface-variant">
+                <span className="rounded-full bg-teal-50 px-3 py-1 text-teal-800">Trigger</span>
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-800">Wait</span>
+                <span className="rounded-full bg-lime-50 px-3 py-1 text-lime-800">Action</span>
+                <span className="rounded-full bg-orange-50 px-3 py-1 text-orange-800">
+                  Condition
+                </span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">End</span>
+              </div>
+            </div>
 
             <div className="relative mx-auto flex max-w-[340px] flex-col items-stretch gap-3">
               {previewNodes.length > 0 ? (
@@ -967,6 +1033,18 @@ export default function Automations() {
               >
                 Ouvrir l’éditeur visuel
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedId(null);
+                  setDraft(initialDraft);
+                  setSelectedTemplateKey('welcome');
+                  toast.info('Workflow de bienvenue prêt à être personnalisé');
+                }}
+                className="ml-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10"
+              >
+                Démarrer un modèle
+              </button>
             </div>
           </section>
 
@@ -1052,7 +1130,10 @@ export default function Automations() {
                   </p>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-secondary" htmlFor="automation-run-at">
+                    <label
+                      className="text-xs font-semibold text-secondary"
+                      htmlFor="automation-run-at"
+                    >
                       Exécuter le
                     </label>
                     <input
@@ -1073,7 +1154,10 @@ export default function Automations() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-secondary" htmlFor="automation-segment-id">
+                    <label
+                      className="text-xs font-semibold text-secondary"
+                      htmlFor="automation-segment-id"
+                    >
                       Segment cible (optionnel)
                     </label>
                     <select
@@ -1098,12 +1182,17 @@ export default function Automations() {
                       ))}
                     </select>
                     <p className="text-[11px] text-on-surface-variant">
-                      {segmentsLoading ? 'Chargement des segments...' : 'Associe l’automatisation à un segment précis.'}
+                      {segmentsLoading
+                        ? 'Chargement des segments...'
+                        : 'Associe l’automatisation à un segment précis.'}
                     </p>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-secondary" htmlFor="automation-contact-id">
+                    <label
+                      className="text-xs font-semibold text-secondary"
+                      htmlFor="automation-contact-id"
+                    >
                       Contact cible (optionnel)
                     </label>
                     <select
@@ -1122,7 +1211,10 @@ export default function Automations() {
                     >
                       <option value="">Aucun contact</option>
                       {contacts.map((contact) => {
-                        const label = [contact.firstName, contact.lastName].filter(Boolean).join(' ').trim();
+                        const label = [contact.firstName, contact.lastName]
+                          .filter(Boolean)
+                          .join(' ')
+                          .trim();
                         return (
                           <option key={contact.id} value={contact.id}>
                             {label || contact.email || contact.phone || contact.id}
@@ -1131,7 +1223,9 @@ export default function Automations() {
                       })}
                     </select>
                     <p className="text-[11px] text-on-surface-variant">
-                      {contactsLoading ? 'Chargement des contacts...' : 'Laissez vide si le déclenchement doit viser le segment ou la campagne liée.'}
+                      {contactsLoading
+                        ? 'Chargement des contacts...'
+                        : 'Laissez vide si le déclenchement doit viser le segment ou la campagne liée.'}
                     </p>
                   </div>
                 </div>
@@ -1257,7 +1351,8 @@ export default function Automations() {
                   </button>
                 </div>
                 <div className="mb-2 rounded-lg border border-dashed border-outline-variant/40 bg-surface/30 px-3 py-2 text-[11px] text-on-surface-variant">
-                  Le sélecteur n’affiche que les campagnes <span className="font-semibold text-secondary">Automatisations</span>.
+                  Le sélecteur n’affiche que les campagnes{' '}
+                  <span className="font-semibold text-secondary">Automatisations</span>.
                 </div>
                 <select
                   id="automation-campaign-id"
@@ -1279,7 +1374,7 @@ export default function Automations() {
                     </optgroup>
                   )}
                 </select>
-                    {campaignsLoading && (
+                {campaignsLoading && (
                   <p className="text-[11px] text-on-surface-variant">Chargement des campagnes...</p>
                 )}
                 {!campaignsLoading && campaignChannel && campaigns.length === 0 && (
@@ -1320,7 +1415,7 @@ export default function Automations() {
                   className="text-xs font-semibold text-secondary"
                   htmlFor="automation-template-id"
                 >
-                  Template ID (optionnel)
+                  Modèle associé (optionnel)
                 </label>
                 <input
                   id="automation-template-id"
@@ -1329,7 +1424,7 @@ export default function Automations() {
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, templateId: event.target.value }))
                   }
-                  placeholder="uuid-template"
+                  placeholder="Identifiant du modèle"
                 />
               </div>
 
@@ -1348,7 +1443,7 @@ export default function Automations() {
             </form>
 
             <div className="mt-4 rounded-lg border border-primary/15 bg-primary/5 p-3 text-xs text-secondary">
-              <p className="font-semibold">Conformité RG</p>
+              <p className="font-semibold">Points clés</p>
               <ul className="mt-2 space-y-1 text-on-surface-variant">
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 text-lime-600" />

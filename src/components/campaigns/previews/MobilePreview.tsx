@@ -12,15 +12,15 @@ interface MobilePreviewProps {
  * Mobile Preview Component
  * Affiche une prévisualisation réaliste sur téléphone mobile
  */
-export const MobilePreview: FC<MobilePreviewProps> = ({
-  type,
-  emailContent,
-  smsContent,
-}) => {
+export const MobilePreview: FC<MobilePreviewProps> = ({ type, emailContent, smsContent }) => {
   const renderCompactBlock = (block: CampaignBlock, key: string) => {
     if (block.type === 'text') {
       return (
-        <p key={key} className="text-xs text-on-surface leading-relaxed" style={getTextStyle(block.content)}>
+        <p
+          key={key}
+          className="text-xs text-on-surface leading-relaxed"
+          style={getTextStyle(block.content)}
+        >
           {typeof block.content.text === 'string' ? block.content.text : 'Texte'}
         </p>
       );
@@ -28,7 +28,10 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
 
     if (block.type === 'image') {
       return (
-        <div key={key} className="w-full h-20 bg-surface-container rounded flex items-center justify-center text-on-surface-variant overflow-hidden">
+        <div
+          key={key}
+          className="w-full h-20 bg-surface-container rounded flex items-center justify-center text-on-surface-variant overflow-hidden"
+        >
           {typeof block.content.src === 'string' && block.content.src ? (
             <img
               src={imageUploadService.getThumbnail(block.content.src)}
@@ -69,7 +72,8 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
 
     if (block.type === 'product') {
       const product = block.content as Record<string, unknown>;
-      const title = typeof product.title === 'string' && product.title.trim() ? product.title : 'Produit';
+      const title =
+        typeof product.title === 'string' && product.title.trim() ? product.title : 'Produit';
       const description = typeof product.description === 'string' ? product.description : '';
       const price = typeof product.price === 'string' ? product.price : '';
       const image = typeof product.image === 'string' ? product.image : '';
@@ -79,17 +83,29 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
         <div className="overflow-hidden rounded-lg border border-outline-variant/30 bg-white">
           <div className="h-20 bg-surface-container flex items-center justify-center overflow-hidden">
             {image ? (
-              <img src={imageUploadService.getThumbnail(image)} alt={title} className="w-full h-full object-cover" />
+              <img
+                src={imageUploadService.getThumbnail(image)}
+                alt={title}
+                className="w-full h-full object-cover"
+              />
             ) : (
-              <span className="material-symbols-outlined text-lg text-on-surface-variant">shopping_bag</span>
+              <span className="material-symbols-outlined text-lg text-on-surface-variant">
+                shopping_bag
+              </span>
             )}
           </div>
           <div className="p-2 space-y-1">
             <div className="flex items-start justify-between gap-2">
               <p className="text-[11px] font-bold text-on-surface line-clamp-1">{title}</p>
-              {price && <span className="text-[10px] font-bold text-primary whitespace-nowrap">{price}</span>}
+              {price && (
+                <span className="text-[10px] font-bold text-primary whitespace-nowrap">
+                  {price}
+                </span>
+              )}
             </div>
-            {description && <p className="text-[10px] text-on-surface-variant line-clamp-2">{description}</p>}
+            {description && (
+              <p className="text-[10px] text-on-surface-variant line-clamp-2">{description}</p>
+            )}
           </div>
         </div>
       );
@@ -115,23 +131,26 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
             { id: 'instagram', icon: '📷', color: '#E4405F' },
             { id: 'tiktok', icon: '♪', color: '#000000' },
             { id: 'linkedin', icon: '🔗', color: '#0A66C2' },
-          ].map((network) => {
-            const url = ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
-            if (!url) return null;
-            return (
-              <a
-                key={network.id}
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
-                style={{ backgroundColor: network.color }}
-                title={network.id}
-              >
-                {network.icon}
-              </a>
-            );
-          }).filter(Boolean)}
+          ]
+            .map((network) => {
+              const url =
+                ((block.content as Record<string, unknown>)?.[network.id] as string) || '';
+              if (!url) return null;
+              return (
+                <a
+                  key={network.id}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-80 transition-opacity"
+                  style={{ backgroundColor: network.color }}
+                  title={network.id}
+                >
+                  {network.icon}
+                </a>
+              );
+            })
+            .filter(Boolean)}
         </div>
       );
     }
@@ -153,11 +172,16 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
             const col = rawColumns[idx];
             const nestedBlocks = Array.isArray(col?.blocks) ? (col.blocks as CampaignBlock[]) : [];
             return (
-              <div key={`${key}-col-${idx}`} className="rounded border border-outline-variant/30 p-1 space-y-1">
+              <div
+                key={`${key}-col-${idx}`}
+                className="rounded border border-outline-variant/30 p-1 space-y-1"
+              >
                 {nestedBlocks.length === 0 ? (
                   <div className="h-8 bg-surface-container rounded" />
                 ) : (
-                  nestedBlocks.map((nested, nestedIdx) => renderCompactBlock(nested, `${key}-nested-${idx}-${nestedIdx}`))
+                  nestedBlocks.map((nested, nestedIdx) =>
+                    renderCompactBlock(nested, `${key}-nested-${idx}-${nestedIdx}`),
+                  )
                 )}
               </div>
             );
@@ -167,7 +191,16 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
     }
 
     if (block.type === 'spacing') {
-      return <div key={key} style={{ height: getSpacingHeight((block.content as Record<string, unknown>)?.size as string | undefined) }} />;
+      return (
+        <div
+          key={key}
+          style={{
+            height: getSpacingHeight(
+              (block.content as Record<string, unknown>)?.size as string | undefined,
+            ),
+          }}
+        />
+      );
     }
 
     if (block.type === 'html') {
@@ -192,9 +225,7 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
     const fontWeightRaw = content.fontWeight;
     const textAlignRaw = content.textAlign;
     const textAlign: CSSProperties['textAlign'] =
-      textAlignRaw === 'center' ||
-      textAlignRaw === 'right' ||
-      textAlignRaw === 'justify'
+      textAlignRaw === 'center' || textAlignRaw === 'right' || textAlignRaw === 'justify'
         ? textAlignRaw
         : 'left';
 
@@ -221,28 +252,30 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
   return (
     <div className="relative h-fit lg:self-start lg:sticky lg:top-20 lg:z-40">
       <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant/10 space-y-4">
-        <h3 className="font-headline font-bold text-sm text-on-surface">
-          Aperçu Mobile
-        </h3>
+        <h3 className="font-headline font-bold text-sm text-on-surface">Aperçu Mobile</h3>
 
         {/* iPhone Frame */}
-        <div className="bg-black rounded-[40px] p-3 shadow-2xl flex flex-col" style={{ aspectRatio: '9/16', width: '100%', maxWidth: '280px', margin: '0 auto' }}>
+        <div
+          className="bg-black rounded-[40px] p-3 shadow-2xl flex flex-col"
+          style={{ aspectRatio: '9/16', width: '100%', maxWidth: '280px', margin: '0 auto' }}
+        >
           {/* Status Bar */}
-          <div className="bg-black rounded-[30px] text-white text-[10px] px-4 py-2 flex justify-between items-center mb-1">
+          <div className="shrink-0 bg-black rounded-[30px] text-white text-[10px] px-4 py-2 flex justify-between items-center mb-1">
             <span>9:41</span>
             <span>●●●●●</span>
           </div>
 
-          {/* Content Area */}
-          <div className="bg-white rounded-[30px] min-h-0 flex-1 overflow-hidden flex flex-col">
+          {/* Content Area - overflow-clip preserve rounded corners while allowing inner scroll */}
+          <div
+            className="bg-white rounded-[30px] min-h-0 flex-1 flex flex-col"
+            style={{ overflow: 'hidden', minHeight: 0 }}
+          >
             {type === 'sms' && smsContent && (
               <div className="min-h-0 flex-1 p-4 flex flex-col justify-end space-y-2 overflow-auto">
                 {/* SMS Message */}
                 <div className="flex justify-end">
                   <div className="bg-primary text-on-primary rounded-2xl rounded-tr-sm p-3 max-w-[200px] shadow-sm">
-                    <p className="text-sm leading-relaxed break-words">
-                      {smsContent.message}
-                    </p>
+                    <p className="text-sm leading-relaxed break-words">{smsContent.message}</p>
                   </div>
                 </div>
                 {/* Timestamp */}
@@ -253,10 +286,12 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
             )}
 
             {type === 'email' && emailContent && (
-              <div className="min-h-0 flex-1 flex flex-col overflow-auto">
-                {/* Email Header */}
-                <div className="bg-surface-container p-3 border-b border-outline-variant/20">
-                  <p className="text-xs font-bold text-on-surface-variant mb-1">DE: noreply@novasms.ci</p>
+              <div className="min-h-0 flex-1 flex flex-col" style={{ height: 0 }}>
+                {/* Email Header - fixed */}
+                <div className="shrink-0 bg-surface-container p-3 border-b border-outline-variant/20">
+                  <p className="text-xs font-bold text-on-surface-variant mb-1">
+                    DE: noreply@novasms.ci
+                  </p>
                   <p className="text-xs font-bold text-on-surface truncate">
                     {emailContent.subject}
                   </p>
@@ -267,12 +302,17 @@ export const MobilePreview: FC<MobilePreviewProps> = ({
                   )}
                 </div>
 
-                {/* Email Body */}
-                <div className="min-h-0 flex-1 p-3 text-sm overflow-auto space-y-2 break-words">
+                {/* Email Body - scrollable, height 0 forces flex to constrain to parent */}
+                <div
+                  className="min-h-0 flex-1 p-3 text-sm overflow-y-auto space-y-2 break-words"
+                  style={{ height: 0 }}
+                >
                   {emailContent.blocks.length === 0 ? (
                     <p className="text-on-surface-variant text-xs">Aucun bloc ajouté</p>
                   ) : (
-                    emailContent.blocks.map((block: CampaignBlock) => renderCompactBlock(block, block.id))
+                    emailContent.blocks.map((block: CampaignBlock) =>
+                      renderCompactBlock(block, block.id),
+                    )
                   )}
                 </div>
               </div>

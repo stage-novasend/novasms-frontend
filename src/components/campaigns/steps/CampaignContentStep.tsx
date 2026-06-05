@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useCampaignStore } from '@/store/campaign.store';
 import { EmailEditor } from '../editors/EmailEditor';
 import { SMSEditor } from '../editors/SMSEditor';
-import { TemplateLibrary } from '../TemplateLibrary';
+import { TemplatePreviewLibrary } from '../TemplatePreviewLibrary';
 import type { EmailTemplate } from '@/types/email-templates';
 
 interface CampaignContentStepProps {
@@ -17,10 +17,7 @@ interface CampaignContentStepProps {
  * Persists content changes to store
  */
 
-export const CampaignContentStep: FC<CampaignContentStepProps> = ({
-  onNext,
-  onPrev,
-}) => {
+export const CampaignContentStep: FC<CampaignContentStepProps> = ({ onNext, onPrev }) => {
   const { draft, setDraftEmailContent } = useCampaignStore();
   const [showTemplates, setShowTemplates] = useState(!draft.emailContent?.subject); // Show templates si pas de contenu
 
@@ -29,7 +26,11 @@ export const CampaignContentStep: FC<CampaignContentStepProps> = ({
   }, [draft.channel, draft.emailContent?.subject]);
 
   const handleTemplateSelect = (template: EmailTemplate) => {
-    setDraftEmailContent(template.content);
+    setDraftEmailContent({
+      subject: template.content.subject,
+      preheader: template.content.preheader ?? '',
+      blocks: template.content.blocks,
+    });
     setShowTemplates(false);
   };
 
@@ -50,9 +51,7 @@ export const CampaignContentStep: FC<CampaignContentStepProps> = ({
             <span className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center font-bold text-sm border-2 border-primary/40">
               ✓
             </span>
-            <span className="text-xs font-bold text-on-surface-variant uppercase">
-              Canal
-            </span>
+            <span className="text-xs font-bold text-on-surface-variant uppercase">Canal</span>
           </div>
           <div className="w-20 h-[2px] bg-primary/40" />
           <div className="flex flex-col items-center gap-2 flex-1 text-primary">
@@ -66,18 +65,14 @@ export const CampaignContentStep: FC<CampaignContentStepProps> = ({
             <span className="w-10 h-10 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-sm">
               3
             </span>
-            <span className="text-xs font-bold text-on-surface-variant uppercase">
-              Audience
-            </span>
+            <span className="text-xs font-bold text-on-surface-variant uppercase">Audience</span>
           </div>
           <div className="w-20 h-[2px] bg-outline-variant/30" />
           <div className="flex flex-col items-center gap-2 flex-1 opacity-40">
             <span className="w-10 h-10 rounded-full border-2 border-outline-variant flex items-center justify-center font-bold text-sm">
               4
             </span>
-            <span className="text-xs font-bold text-on-surface-variant uppercase">
-              Planif.
-            </span>
+            <span className="text-xs font-bold text-on-surface-variant uppercase">Planif.</span>
           </div>
         </div>
       </div>
@@ -92,10 +87,16 @@ export const CampaignContentStep: FC<CampaignContentStepProps> = ({
               Choisir un modèle d'email
             </h2>
             <p className="text-on-surface-variant">
-              Ou <button onClick={() => setShowTemplates(false)} className="text-primary font-bold hover:underline">créer un email vierge</button>
+              Ou{' '}
+              <button
+                onClick={() => setShowTemplates(false)}
+                className="text-primary font-bold hover:underline"
+              >
+                créer un email vierge
+              </button>
             </p>
           </div>
-          <TemplateLibrary onTemplateSelect={handleTemplateSelect} />
+          <TemplatePreviewLibrary onUseTemplate={handleTemplateSelect} />
         </div>
       ) : (
         <div className="space-y-8">

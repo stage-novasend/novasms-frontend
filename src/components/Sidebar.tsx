@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppMetrics } from '@/hooks/useAppMetrics';
+import { useUiStore } from '@/stores/uiStore';
 
 function DashboardIcon() {
   return (
@@ -99,6 +100,26 @@ function TeamIcon() {
   );
 }
 
+function CreditsIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="1" y="3" width="12" height="9" rx="2" />
+      <line x1="1" y1="6.5" x2="13" y2="6.5" />
+      <line x1="4" y1="9.5" x2="6" y2="9.5" />
+    </svg>
+  );
+}
+
 function SettingsIcon() {
   return (
     <svg
@@ -162,15 +183,17 @@ function Item({
   label,
   badge,
   collapsed,
+  id,
 }: {
   to: string;
   icon: ReactNode;
   label: string;
   badge?: string;
   collapsed: boolean;
+  id?: string;
 }) {
   return (
-    <NavLink to={to} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+    <NavLink to={to} id={id} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
       <span className="nav-icon" aria-hidden="true">
         {icon}
       </span>
@@ -183,8 +206,45 @@ function Item({
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
   const { contactsTotal, credits, loading, refresh } = useAppMetrics();
+  const { activeDashboard, toggleDashboard } = useUiStore();
+  const dashboardClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleDashboardClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (location.pathname === '/dashboard') {
+      return;
+    }
+
+    if (dashboardClickTimer.current) {
+      clearTimeout(dashboardClickTimer.current);
+    }
+
+    dashboardClickTimer.current = setTimeout(() => {
+      dashboardClickTimer.current = null;
+      navigate('/dashboard');
+    }, 180);
+  };
+
+  const handleDashboardDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (dashboardClickTimer.current) {
+      clearTimeout(dashboardClickTimer.current);
+      dashboardClickTimer.current = null;
+    }
+    toggleDashboard();
+    navigate('/dashboard');
+  };
+
+  useEffect(() => {
+    return () => {
+      if (dashboardClickTimer.current) {
+        clearTimeout(dashboardClickTimer.current);
+      }
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -209,7 +269,7 @@ export default function Sidebar() {
       </div>
       <div className="sb-nav">
         {!collapsed && (
-          <div className="sidebar-credits">
+          <div id="tour-sidebar-credits" className="sidebar-credits">
             <div className="credits-pill-top">
               <span className="credits-label">Crédits disponibles</span>
               <button className="credits-recharge" onClick={() => void refresh()}>
@@ -231,30 +291,57 @@ export default function Sidebar() {
         )}
 
         {!collapsed && <div className="sb-section-label">Principal</div>}
-        <Item
-          to="/dashboard"
-          icon={<DashboardIcon />}
-          label="Tableau de bord"
-          collapsed={collapsed}
-        />
+        <a
+          href="/dashboard"
+          onClick={handleDashboardClick}
+          onDoubleClick={handleDashboardDoubleClick}
+          className={`nav-item ${location.pathname === '/dashboard' ? 'active' : ''}`}
+          title={`Double-clic pour basculer vers le tableau ${activeDashboard === 1 ? 'opérationnel' : 'analytique'}`}
+        >
+          <span className="nav-icon">
+            <DashboardIcon />
+          </span>
+          {!collapsed && <span className="nav-text">Tableau de bord</span>}
+        </a>
         <Item
           to="/contacts"
+          id="tour-nav-contacts"
           icon={<ContactsIcon />}
           label="Contacts"
           badge={contactsTotal > 0 ? contactsTotal.toLocaleString('fr-FR') : undefined}
           collapsed={collapsed}
         />
-        <Item to="/campaigns" icon={<CampaignsIcon />} label="Campagnes" collapsed={collapsed} />
+        <Item
+          to="/campaigns"
+          id="tour-nav-campaigns"
+          icon={<CampaignsIcon />}
+          label="Campagnes"
+          collapsed={collapsed}
+        />
         <Item
           to="/automations"
+          id="tour-nav-automations"
           icon={<AutomationsIcon />}
           label="Automatisations"
           collapsed={collapsed}
         />
-        <Item to="/analytics" icon={<AnalyticsIcon />} label="Analytics" collapsed={collapsed} />
+        <Item
+          to="/analytics"
+          id="tour-nav-analytics"
+          icon={<AnalyticsIcon />}
+          label="Analytics"
+          collapsed={collapsed}
+        />
 
         <div className="sb-divider" />
         {!collapsed && <div className="sb-section-label">Compte</div>}
+        <Item
+          to="/rechargement"
+          id="tour-nav-rechargement"
+          icon={<CreditsIcon />}
+          label="Crédits"
+          collapsed={collapsed}
+        />
         <Item
           to="/account/security"
           icon={<SecurityIcon />}
@@ -262,6 +349,12 @@ export default function Sidebar() {
           collapsed={collapsed}
         />
         <Item to="/account/team" icon={<TeamIcon />} label="Équipe" collapsed={collapsed} />
+        <Item
+          to="/account/integrations"
+          icon={<SettingsIcon />}
+          label="Intégrations"
+          collapsed={collapsed}
+        />
         <Item
           to="/account/settings"
           icon={<SettingsIcon />}

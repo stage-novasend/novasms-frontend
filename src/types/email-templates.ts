@@ -8,7 +8,15 @@ import type { EmailContent } from '@/store/campaign.store';
 export interface EmailTemplate {
   id: string;
   name: string;
-  category: 'bienvenue' | 'promo' | 'newsletter' | 'panier' | 'reengagement' | 'anniversaire' | 'seasonal' | 'service';
+  category:
+    | 'bienvenue'
+    | 'promo'
+    | 'newsletter'
+    | 'panier'
+    | 'reengagement'
+    | 'anniversaire'
+    | 'seasonal'
+    | 'service';
   thumbnail?: string;
   content: EmailContent;
 }
@@ -31,7 +39,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'welcome-1-text-2',
           type: 'text',
-          content: { text: 'Merci d\'avoir rejoint notre communauté. Nous sommes ravi de vous accueillir!' },
+          content: {
+            text: "Merci d'avoir rejoint notre communauté. Nous sommes ravi de vous accueillir!",
+          },
         },
         {
           id: 'welcome-1-button-1',
@@ -57,7 +67,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'welcome-2-text-2',
           type: 'text',
-          content: { text: 'En tant que nouveau membre, profitez de -20% sur votre première commande.' },
+          content: {
+            text: 'En tant que nouveau membre, profitez de -20% sur votre première commande.',
+          },
         },
         {
           id: 'welcome-2-text-3',
@@ -88,7 +100,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'welcome-3-text-2',
           type: 'text',
-          content: { text: 'Votre profil est créé. En complétant vos préférences, vous recevrez des offres 100% personnalisées.' },
+          content: {
+            text: 'Votre profil est créé. En complétant vos préférences, vous recevrez des offres 100% personnalisées.',
+          },
         },
         {
           id: 'welcome-3-button-1',
@@ -121,12 +135,12 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'promo-flash-text-3',
           type: 'text',
-          content: { text: 'Valable jusqu\'à 18h ce soir seulement!' },
+          content: { text: "Valable jusqu'à 18h ce soir seulement!" },
         },
         {
           id: 'promo-flash-button-1',
           type: 'button',
-          content: { text: 'Profiter de l\'offre', url: 'https://novasms.ci/sale' },
+          content: { text: "Profiter de l'offre", url: 'https://novasms.ci/sale' },
         },
       ],
     },
@@ -137,7 +151,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
     category: 'seasonal',
     content: {
       subject: 'Fêtes 2025 - Votre sélection exclusive',
-      preheader: 'Cadeaux parfaits jusqu\'à -50%',
+      preheader: "Cadeaux parfaits jusqu'à -50%",
       blocks: [
         {
           id: 'promo-seasonal-text-1',
@@ -147,7 +161,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'promo-seasonal-text-2',
           type: 'text',
-          content: { text: 'Nos meilleurs cadeaux pour les fêtes sont là, avec jusqu\'à -50% de réduction.' },
+          content: {
+            text: "Nos meilleurs cadeaux pour les fêtes sont là, avec jusqu'à -50% de réduction.",
+          },
         },
         {
           id: 'promo-seasonal-button-1',
@@ -201,7 +217,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'cart-remind-1-text-2',
           type: 'text',
-          content: { text: 'Vous aviez 3 articles en attente. Compléter votre achat avant que votre panier n\'expire.' },
+          content: {
+            text: "Vous aviez 3 articles en attente. Compléter votre achat avant que votre panier n'expire.",
+          },
         },
         {
           id: 'cart-remind-1-button-1',
@@ -265,7 +283,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'newsletter-button-1',
           type: 'button',
-          content: { text: 'Lire l\'article', url: 'https://novasms.ci/blog' },
+          content: { text: "Lire l'article", url: 'https://novasms.ci/blog' },
         },
         {
           id: 'newsletter-divider-1',
@@ -275,7 +293,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'newsletter-text-3',
           type: 'text',
-          content: { text: 'Spécial abonnés - Code EXCLUSIVE20 pour -20% sur l\'ensemble du catalogue' },
+          content: {
+            text: "Spécial abonnés - Code EXCLUSIVE20 pour -20% sur l'ensemble du catalogue",
+          },
         },
       ],
     },
@@ -298,7 +318,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'reeng-text-2',
           type: 'text',
-          content: { text: 'Vous nous manquez {{prénom}}. Nous avons une surprise spéciale: -30% sur votre prochain achat.' },
+          content: {
+            text: 'Vous nous manquez {{prénom}}. Nous avons une surprise spéciale: -30% sur votre prochain achat.',
+          },
         },
         {
           id: 'reeng-button-1',
@@ -326,7 +348,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'birthday-text-2',
           type: 'text',
-          content: { text: 'Pour célébrer votre jour spécial, nous vous offrons {{code_promo}} - -50% sur tout!' },
+          content: {
+            text: 'Pour célébrer votre jour spécial, nous vous offrons {{code_promo}} - -50% sur tout!',
+          },
         },
         {
           id: 'birthday-button-1',
@@ -354,7 +378,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'order-text-2',
           type: 'text',
-          content: { text: 'Merci {{prénom}}! Votre commande #12345 a été reçue et sera traitée rapidement.' },
+          content: {
+            text: 'Merci {{prénom}}! Votre commande #12345 a été reçue et sera traitée rapidement.',
+          },
         },
         {
           id: 'order-text-3',
@@ -385,7 +411,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'ship-text-2',
           type: 'text',
-          content: { text: 'Votre commande a quitté notre entrepôt et sera livrée dans 2-3 jours.' },
+          content: {
+            text: 'Votre commande a quitté notre entrepôt et sera livrée dans 2-3 jours.',
+          },
         },
         {
           id: 'ship-button-1',
@@ -423,7 +451,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
   },
   {
     id: 'feedback-request',
-    name: 'Demande d\'Avis',
+    name: "Demande d'Avis",
     category: 'service',
     content: {
       subject: 'Comment était votre expérience {{prénom}}?',
@@ -437,7 +465,9 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'feedback-text-2',
           type: 'text',
-          content: { text: 'Avez-vous apprécié votre achat? Aidez-nous à améliorer en partageant votre expérience.' },
+          content: {
+            text: 'Avez-vous apprécié votre achat? Aidez-nous à améliorer en partageant votre expérience.',
+          },
         },
         {
           id: 'feedback-button-1',
@@ -460,7 +490,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'referral-text-1',
           type: 'text',
-          content: { text: 'Partagez l\'amour 💚' },
+          content: { text: "Partagez l'amour 💚" },
         },
         {
           id: 'referral-text-2',
@@ -491,12 +521,174 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         {
           id: 'vip-text-2',
           type: 'text',
-          content: { text: 'Votre fidélité vous ouvre des portes! Accédez aux ventes privées, -30% toute l\'année.' },
+          content: {
+            text: "Votre fidélité vous ouvre des portes! Accédez aux ventes privées, -30% toute l'année.",
+          },
         },
         {
           id: 'vip-button-1',
           type: 'button',
-          content: { text: 'Accepter l\'invitation VIP', url: 'https://novasms.ci/vip' },
+          content: { text: "Accepter l'invitation VIP", url: 'https://novasms.ci/vip' },
+        },
+      ],
+    },
+  },
+
+  // === SUPPLÉMENTAIRES ===
+  {
+    id: 'double-optin',
+    name: 'Double Opt-in',
+    category: 'service',
+    content: {
+      subject: '{{prénom}}, confirmez votre inscription',
+      preheader: 'Un clic pour activer votre compte',
+      blocks: [
+        {
+          id: 'optin-text-1',
+          type: 'text',
+          content: {
+            text: 'Confirmez votre adresse email',
+            fontSize: 22,
+            fontWeight: 700,
+            textAlign: 'center',
+            color: '#111827',
+          },
+        },
+        {
+          id: 'optin-divider',
+          type: 'divider',
+          content: { thickness: 1, color: '#e5e7eb', width: '60%' },
+        },
+        {
+          id: 'optin-text-2',
+          type: 'text',
+          content: {
+            text: 'Bonjour {{prénom}},\n\nCliquez sur le bouton ci-dessous pour confirmer votre inscription à {{boutique}} et activer votre compte.',
+          },
+        },
+        {
+          id: 'optin-button-1',
+          type: 'button',
+          content: { text: '✓ Confirmer mon email', url: 'https://novasms.ci/confirm' },
+        },
+        {
+          id: 'optin-text-3',
+          type: 'text',
+          content: {
+            text: "Ce lien est valable 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.",
+            fontSize: 12,
+            color: '#9ca3af',
+          },
+        },
+      ],
+    },
+  },
+  {
+    id: 'password-reset',
+    name: 'Réinitialisation Mot de Passe',
+    category: 'service',
+    content: {
+      subject: 'Réinitialisation de votre mot de passe',
+      preheader: 'Lien valable 1 heure seulement',
+      blocks: [
+        {
+          id: 'pwd-text-1',
+          type: 'text',
+          content: {
+            text: 'Réinitialisation de mot de passe 🔐',
+            fontSize: 20,
+            fontWeight: 700,
+            color: '#111827',
+          },
+        },
+        {
+          id: 'pwd-text-2',
+          type: 'text',
+          content: {
+            text: 'Bonjour {{prénom}},\n\nVous avez demandé la réinitialisation de votre mot de passe chez {{boutique}}. Cliquez sur le bouton ci-dessous pour en créer un nouveau.',
+          },
+        },
+        {
+          id: 'pwd-button-1',
+          type: 'button',
+          content: {
+            text: 'Réinitialiser mon mot de passe',
+            url: 'https://novasms.ci/reset-password',
+          },
+        },
+        {
+          id: 'pwd-divider',
+          type: 'divider',
+          content: { thickness: 1, color: '#e5e7eb', width: '100%' },
+        },
+        {
+          id: 'pwd-text-3',
+          type: 'text',
+          content: {
+            text: "Ce lien expire dans 1 heure. Si vous n'avez pas fait cette demande, votre compte est sécurisé — ignorez cet email.",
+            fontSize: 12,
+            color: '#9ca3af',
+          },
+        },
+      ],
+    },
+  },
+  {
+    id: 'newsletter-product-spotlight',
+    name: 'Mise en Avant Produit',
+    category: 'newsletter',
+    content: {
+      subject: '🌟 Le produit du mois chez {{boutique}}',
+      preheader: 'Découvrez notre sélection exclusive',
+      blocks: [
+        {
+          id: 'spotlight-text-1',
+          type: 'text',
+          content: {
+            text: 'Produit du mois',
+            fontSize: 11,
+            fontWeight: 700,
+            color: '#2ec80a',
+            textAlign: 'center',
+          },
+        },
+        {
+          id: 'spotlight-text-2',
+          type: 'text',
+          content: {
+            text: 'Notre coup de cœur du moment',
+            fontSize: 24,
+            fontWeight: 800,
+            textAlign: 'center',
+            color: '#111827',
+          },
+        },
+        {
+          id: 'spotlight-product',
+          type: 'product',
+          content: {
+            title: 'Pack Premium NovaSMS',
+            description:
+              '5000 SMS + accès complet à toutes les fonctionnalités marketing. Idéal pour les PME.',
+            price: '49 000 FCFA / mois',
+            image: '',
+            url: 'https://novasms.ci/pricing',
+          },
+        },
+        {
+          id: 'spotlight-divider',
+          type: 'divider',
+          content: { thickness: 1, color: '#e5e7eb', width: '100%' },
+        },
+        {
+          id: 'spotlight-text-3',
+          type: 'text',
+          content: {
+            text: 'Utilisez {{code_promo}} pour -15% sur votre premier mois.',
+            textAlign: 'center',
+            color: '#6b7280',
+            fontSize: 13,
+          },
         },
       ],
     },

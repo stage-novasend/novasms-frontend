@@ -45,11 +45,11 @@ export const SMSEditor: FC = () => {
   };
 
   // Calculate segments and cost - WITH DYNAMIC RECIPIENT COUNT
-  const recipientCount = draft.segmentId ? (draft.estimatedRecipients || 0) : 0;
+  const recipientCount = draft.segmentId ? draft.estimatedRecipients || 0 : 0;
   const segments = useMemo(() => calculateSMSSegments(totalMessageLength), [totalMessageLength]);
   const estimatedCost = useMemo(
     () => calculateSMSCost(totalMessageLength, recipientCount),
-    [totalMessageLength, recipientCount]
+    [totalMessageLength, recipientCount],
   );
 
   const handleSave = () => {
@@ -97,9 +97,7 @@ export const SMSEditor: FC = () => {
             <div className="flex items-center gap-3">
               <span
                 className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-tighter ${
-                  isTooLong
-                    ? 'bg-error/20 text-error'
-                    : 'bg-secondary-container/30 text-secondary'
+                  isTooLong ? 'bg-error/20 text-error' : 'bg-secondary-container/30 text-secondary'
                 }`}
               >
                 {segments} SMS{segments > 1 ? 's' : ''}
@@ -120,9 +118,7 @@ export const SMSEditor: FC = () => {
             placeholder="Rédigez votre message ici..."
             rows={6}
             className={`w-full bg-surface-container-lowest border-none ring-1 focus:ring-2 rounded-2xl px-5 py-5 font-body text-base text-on-surface resize-none leading-relaxed transition-all ${
-              isTooLong
-                ? 'ring-error focus:ring-error'
-                : 'ring-outline-variant focus:ring-primary'
+              isTooLong ? 'ring-error focus:ring-error' : 'ring-outline-variant focus:ring-primary'
             }`}
           />
 
@@ -133,12 +129,11 @@ export const SMSEditor: FC = () => {
             </div>
           )}
 
-          {/* STOP Block (RG-22) — Non-supprimable et obligatoire */}
           <div className="mt-6 pt-6 border-t-2 border-outline-variant/30">
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">
-                  Lien de désabonnement (Obligatoire - RG-22)
+                  Lien de désabonnement obligatoire
                 </p>
                 <p className="text-[11px] text-on-surface-variant mt-1">
                   Ce bloc est automatiquement ajouté à chaque SMS
@@ -151,13 +146,9 @@ export const SMSEditor: FC = () => {
 
             <div className="p-4 bg-surface-container rounded-xl border-2 border-warning/40">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-warning text-xl">
-                  lock
-                </span>
+                <span className="material-symbols-outlined text-warning text-xl">lock</span>
                 <div className="flex-1">
-                  <p className="font-mono font-semibold text-on-surface text-sm">
-                    STOP au [CODE]
-                  </p>
+                  <p className="font-mono font-semibold text-on-surface text-sm">STOP au [CODE]</p>
                   <p className="text-xs text-on-surface-variant mt-1">
                     Permet aux destinataires de se désabonner en répondant STOP
                   </p>
@@ -166,7 +157,8 @@ export const SMSEditor: FC = () => {
             </div>
 
             <p className="text-[11px] text-on-surface-variant mt-3">
-              💡 Les {Math.ceil('STOP au [CODE]'.length / 160)} caractères du STOP sont inclus dans le décompte total
+              💡 Les {Math.ceil('STOP au [CODE]'.length / 160)} caractères du STOP sont inclus dans
+              le décompte total
             </p>
           </div>
 
@@ -227,7 +219,9 @@ export const SMSEditor: FC = () => {
       {/* Right: Preview & Cost */}
       <div className="lg:col-span-2 space-y-8 sticky top-20 h-fit">
         {/* Cost Card */}
-        <div className={`bg-gradient-to-br from-secondary to-secondary-container rounded-3xl p-8 text-white shadow-lg ${recipientCount === 0 ? 'opacity-60' : ''}`}>
+        <div
+          className={`bg-gradient-to-br from-secondary to-secondary-container rounded-3xl p-8 text-white shadow-lg ${recipientCount === 0 ? 'opacity-60' : ''}`}
+        >
           <div className="space-y-1 mb-8">
             <p className="text-secondary-fixed-dim text-xs font-bold uppercase tracking-tighter opacity-80">
               Coût unitaire
@@ -237,18 +231,19 @@ export const SMSEditor: FC = () => {
           <div className="pt-8 border-t border-white/10 flex justify-between items-end">
             <div>
               <p className="text-secondary-fixed-dim text-xs font-bold uppercase tracking-tighter opacity-80">
-                Total ({recipientCount.toLocaleString('fr-FR')} destinataire{recipientCount !== 1 ? 's' : ''})
+                Total ({recipientCount.toLocaleString('fr-FR')} destinataire
+                {recipientCount !== 1 ? 's' : ''})
               </p>
               <p className="text-3xl font-black font-headline mt-2">
-                {recipientCount > 0 ? (estimatedCost).toFixed(2) : '0.00'} FCFA
+                {recipientCount > 0 ? estimatedCost.toFixed(2) : '0.00'} FCFA
               </p>
               {recipientCount === 0 && (
-                <p className="text-xs text-white/70 mt-2">
-                  💡 Sélectionnez un segment à l'étape 3
-                </p>
+                <p className="text-xs text-white/70 mt-2">💡 Sélectionnez un segment à l'étape 3</p>
               )}
             </div>
-            <span className={`material-symbols-outlined text-5xl ${recipientCount > 0 ? 'text-secondary-fixed-dim' : 'text-white/30'}`}>
+            <span
+              className={`material-symbols-outlined text-5xl ${recipientCount > 0 ? 'text-secondary-fixed-dim' : 'text-white/30'}`}
+            >
               {recipientCount > 0 ? 'check_circle' : 'pending'}
             </span>
           </div>

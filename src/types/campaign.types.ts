@@ -6,7 +6,16 @@
 // Internal Domain Types (from store/campaign.store.ts)
 export interface CampaignBlock {
   id: string;
-  type: 'text' | 'image' | 'button' | 'product' | 'divider' | 'social' | 'columns' | 'spacing' | 'html';
+  type:
+    | 'text'
+    | 'image'
+    | 'button'
+    | 'product'
+    | 'divider'
+    | 'social'
+    | 'columns'
+    | 'spacing'
+    | 'html';
   content: Record<string, unknown>;
 }
 
@@ -27,8 +36,22 @@ export interface SMSContent {
 export interface ABTestConfig {
   enabled: boolean;
   splitRatio: number;
-  variantA: { emailSubject?: string; smsMessage?: string };
-  variantB: { emailSubject?: string; smsMessage?: string };
+  variantA: {
+    emailSubject?: string;
+    emailPreheader?: string;
+    emailBlocks?: import('@/store/campaign.store').CampaignBlock[];
+    smsMessage?: string;
+    emailHtml?: string;
+    templateId?: string;
+  };
+  variantB: {
+    emailSubject?: string;
+    emailPreheader?: string;
+    emailBlocks?: import('@/store/campaign.store').CampaignBlock[];
+    smsMessage?: string;
+    emailHtml?: string;
+    templateId?: string;
+  };
   winnerCriteria?: 'open_rate' | 'click_rate' | 'conversion';
   autoEvaluate?: boolean;
 }
@@ -81,7 +104,7 @@ export interface CampaignAPICreateRequest {
   schedule?: ScheduleConfig;
   estimatedRecipients?: number;
   estimatedCost?: number;
-    promoCode?: string; // EN-1688: Personalization variable
+  promoCode?: string; // EN-1688: Personalization variable
   status: string;
 }
 
