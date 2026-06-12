@@ -18,6 +18,12 @@ interface OverviewData {
   byChannel: { channel: string; count: number }[];
   evolution: { date: string; sent: number; opened: number }[];
   heatmap: { hour: number; openCount: number; clickCount: number }[];
+  recentOpens: {
+    action: string;
+    createdAt: string;
+    contact: { email: string; firstName: string | null; lastName: string | null };
+    campaignName: string;
+  }[];
   previous: { messagesSent: number; openRate: number; clickRate: number };
 }
 
@@ -126,14 +132,6 @@ function EvolutionChart({
   );
 }
 
-// ─── Heatmap engagement ───────────────────────────────────────────────────
-const DAYS_FR = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
-const HEAT_COLORS = ['#f0f7f0', '#c8f0b0', '#8ee060', '#52cc22', '#2ec80a'];
-function heatColor(v: number, max: number) {
-  if (max === 0) return HEAT_COLORS[0];
-  return HEAT_COLORS[Math.min(4, Math.floor((v / max) * 5))];
-}
-
 export default function Analytics() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<7 | 30 | 90>(30);
@@ -148,8 +146,6 @@ export default function Analytics() {
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, [period]);
-
-  const heatMax = data?.heatmap ? Math.max(...data.heatmap.map((h) => h.openCount), 1) : 1;
 
   const handleExportCsv = () => {
     if (!data?.top5?.length) return;
@@ -454,35 +450,109 @@ export default function Analytics() {
 
           <div className="divider" />
 
-          {/* Heatmap compact */}
+          {/* Derniers contacts ayant ouvert / cliqué */}
           <div>
-            <div className="card-title mb-8">Chaleur d'engagement</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '22px repeat(12, 1fr)', gap: 2 }}>
-              <div />
-              {Array.from({ length: 12 }, (_, h) => (
-                <div key={h} style={{ fontSize: 8, color: 'var(--text-3)', textAlign: 'center' }}>
-                  {h * 2}h
-                </div>
-              ))}
-              {DAYS_FR.map((day, di) => (
-                <>
-                  <div key={day} style={{ fontSize: 9, color: 'var(--text-2)' }}>
-                    {day}
-                  </div>
-                  {Array.from({ length: 12 }, (_, hi) => {
-                    const hour = hi * 2;
-                    const row = data?.heatmap?.find((r) => r.hour === hour);
-                    const v = row ? row.openCount + di : 0;
-                    return (
+            <div className="card-title mb-8">Derniers contacts ayant ouvert</div>
+            {!data?.recentOpens?.length ? (
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: 'var(--text-3)',
+                  textAlign: 'center',
+                  padding: '10px 0',
+                }}
+              >
+                Aucune ouverture récente
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {data.recentOpens.map((r, i) => {
+                  const initials =
+                    [r.contact.firstName, r.contact.lastName]
+                      .filter(Boolean)
+                      .map((n) => n![0].toUpperCase())
+                      .join('') || r.contact.email.slice(0, 2).toUpperCase();
+                  const displayName =
+                    [r.contact.firstName, r.contact.lastName].filter(Boolean).join(' ') ||
+                    r.contact.email;
+                  const isClick = r.action === 'Click';
+                  const elapsed = Math.round(
+                    (Date.now() - new Date(r.createdAt).getTime()) / 60000,
+                  );
+                  const timeLabel =
+                    elapsed < 60
+                      ? `Il y a ${elapsed}min`
+                      : elapsed < 1440
+                        ? `Il y a ${Math.round(elapsed / 60)}h`
+                        : `Il y a ${Math.round(elapsed / 1440)}j`;
+                  return (
+                    <div
+                      key={i}
+                      className="contact-row"
+                      style={{
+                        padding: '5px 0',
+                        borderBottom:
+                          i < data.recentOpens.length - 1 ? '0.5px solid var(--border)' : 'none',
+                      }}
+                    >
                       <div
-                        key={hi}
-                        style={{ height: 12, borderRadius: 2, background: heatColor(v, heatMax) }}
-                      />
-                    );
-                  })}
-                </>
-              ))}
-            </div>
+                        className="contact-avatar"
+                        style={{ width: 24, height: 24, fontSize: 9, flexShrink: 0 }}
+                      >
+                        {initials}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 500,
+                            color: 'var(--text-1)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {displayName}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: 'var(--text-3)',
+                            marginTop: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {r.campaignName}
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: 'var(--text-3)',
+                          whiteSpace: 'nowrap',
+                          marginRight: 6,
+                        }}
+                      >
+                        {timeLabel}
+                      </span>
+                      <span
+                        className="chip"
+                        style={{
+                          fontSize: 10,
+                          padding: '1px 6px',
+                          background: isClick ? 'var(--brand-light)' : 'var(--muted)',
+                          color: isClick ? 'var(--brand-teal)' : 'var(--text-2)',
+                        }}
+                      >
+                        {isClick ? 'Cliqué' : 'Ouvert'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
