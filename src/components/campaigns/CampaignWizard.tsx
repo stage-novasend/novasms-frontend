@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useCampaignStore } from '@/store/campaign.store';
 import { CampaignChannelStep } from './steps/CampaignChannelStep';
 import { CampaignContentStep } from './steps/CampaignContentStep';
@@ -19,6 +19,7 @@ import { getCampaignDetails } from '@/services/campaignService';
 export const CampaignWizard: FC = () => {
   const { id: campaignId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { draft, setDraftStep, saveDraft, clearDraft, selectedCampaignId, error, isLoading } =
     useCampaignStore();
 
@@ -249,7 +250,8 @@ export const CampaignWizard: FC = () => {
     try {
       const persisted = await persistDraftToBackend();
       if (persisted) {
-        setDraftSaved(true);
+        clearDraft();
+        navigate('/campaigns');
       }
     } catch (error) {
       console.error('❌ Error while saving draft to backend:', error);
