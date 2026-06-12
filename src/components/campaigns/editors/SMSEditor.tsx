@@ -60,6 +60,18 @@ export const SMSEditor: FC = () => {
     updateSmsContent({ message: message + variable });
   };
 
+  const handleInsertShortLink = () => {
+    const url = shortLink.trim();
+    if (!url) return;
+    try {
+      new URL(url);
+    } catch {
+      return;
+    }
+    const separator = message && !message.endsWith(' ') && !message.endsWith('\n') ? ' ' : '';
+    updateSmsContent({ message: message + separator + url });
+  };
+
   const isTooLong = totalMessageLength > 160;
 
   return (
@@ -197,9 +209,13 @@ export const SMSEditor: FC = () => {
               placeholder="https://votre-boutique.com/promo"
               className="flex-1 bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3.5 font-body text-sm transition-all"
             />
-            <button className="bg-primary text-white font-bold py-3.5 px-8 rounded-xl hover:brightness-110 transition-all flex items-center gap-2">
+            <button
+              onClick={handleInsertShortLink}
+              disabled={!shortLink.trim()}
+              className="bg-primary text-white font-bold py-3.5 px-8 rounded-xl hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               <span className="material-symbols-outlined">auto_fix_normal</span>
-              Générer
+              Insérer
             </button>
           </div>
           <p className="text-xs text-on-surface-variant mt-2">

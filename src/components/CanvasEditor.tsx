@@ -339,7 +339,7 @@ export default function CanvasEditor({
   // create node/edge
   const addNode = useCallback(
     (type: NodeType) => {
-      const id = `n-${Date.now()}`;
+      const id = `n-${crypto.randomUUID()}`;
       const canvasRect = canvasRef.current?.getBoundingClientRect();
       const x = canvasRect
         ? Math.max(40, Math.round(canvasRect.width / 2 - 110))
@@ -403,7 +403,7 @@ export default function CanvasEditor({
         return;
       }
       const edge: Edge = {
-        id: `e-${Date.now()}`,
+        id: `e-${crypto.randomUUID()}`,
         from: connectFrom.nodeId,
         to: toNodeId,
         fromPort: connectFrom.port,

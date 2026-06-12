@@ -260,7 +260,13 @@ export default function Analytics() {
           Chargement…
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,minmax(0,1fr))', gap: 10 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))',
+            gap: 10,
+          }}
+        >
           {[
             {
               label: 'Envoyés',
@@ -316,6 +322,7 @@ export default function Analytics() {
 
       {/* Charts row: evolution + top campagnes + heatmap compact */}
       <div
+        className="charts-row"
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)',

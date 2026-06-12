@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/api/axios';
 import { contactsApi } from '@/api/contacts';
@@ -28,30 +27,25 @@ export function useOnboardingChecklist() {
         ]);
 
       const profileCompleted =
-        profileResult.status === 'fulfilled' &&
-        Boolean(profileResult.value.data?.account?.sector);
+        profileResult.status === 'fulfilled' && Boolean(profileResult.value.data?.account?.sector);
 
       const contactsCount =
         contactsResult.status === 'fulfilled' &&
         Boolean(
-          contactsResult.value.data &&
-            contactsResult.value.total &&
-            contactsResult.value.total > 0
+          contactsResult.value.data && contactsResult.value.total && contactsResult.value.total > 0,
         );
 
       const campaignsCount =
         campaignsResult.status === 'fulfilled' &&
         Boolean(
           campaignsResult.value.data &&
-            campaignsResult.value.total &&
-            campaignsResult.value.total > 0
+          campaignsResult.value.total &&
+          campaignsResult.value.total > 0,
         );
 
       const segmentsCount =
         segmentsResult.status === 'fulfilled' &&
-        Boolean(
-          Array.isArray(segmentsResult.value) && segmentsResult.value.length > 0
-        );
+        Boolean(Array.isArray(segmentsResult.value) && segmentsResult.value.length > 0);
 
       setItems([
         {
@@ -95,7 +89,7 @@ export function useOnboardingChecklist() {
   }, [refreshChecklist]);
 
   const completionPercentage = Math.round(
-    (items.filter((item) => item.completed).length / items.length) * 100
+    (items.filter((item) => item.completed).length / items.length) * 100,
   );
 
   return {

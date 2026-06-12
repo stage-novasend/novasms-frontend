@@ -208,7 +208,11 @@ export default function Profile() {
         </div>
       ) : (
         <div
-          style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))',
+            gap: 12,
+          }}
         >
           {/* Infos boutique */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

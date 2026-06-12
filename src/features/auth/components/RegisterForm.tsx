@@ -53,21 +53,15 @@ export default function RegisterForm() {
     setServerError(null);
 
     try {
-      console.log("Tentative d'inscription vers:", `${apiUrl}/auth/register`);
-      console.log('Données envoyées:', { ...data, motDePasse: '***' });
-
       const res = await fetch(`${apiUrl}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
 
-      console.log('Réponse reçue:', res.status);
       const json = await res.json();
-      console.log('JSON réponse:', json);
 
       if (res.ok && json.success) {
-        console.log('Inscription réussie, redirection...');
         localStorage.setItem('novasms-pending-confirmation-email', data.email);
         navigate('/confirm-email', { state: { email: data.email } });
       } else {

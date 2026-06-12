@@ -62,6 +62,8 @@ export default function ContactTable({
 
   const [filters, setFilters] = useState<ContactFilter>({});
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchType, setSearchType] = useState<'all' | 'tag' | 'location'>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState<
     Array<{ key: string; value: string; label: string }>
@@ -94,6 +96,12 @@ export default function ContactTable({
     estimateSize: () => 56,
     overscan: 8,
   });
+
+  // Debounce search query (500ms) to avoid refetching on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const formatSegmentFormula = (criteria: SegmentWithContacts['criteria']) => {
     const payload = criteria as {
@@ -151,9 +159,13 @@ export default function ContactTable({
           limit: number;
           cursor?: string;
           search?: string;
+          tag?: string;
+          location?: string;
         } & ContactFilter = {
           limit: 20,
-          ...(searchQuery && { search: searchQuery }),
+          ...(debouncedSearch && searchType === 'tag' && { tag: debouncedSearch }),
+          ...(debouncedSearch && searchType === 'location' && { location: debouncedSearch }),
+          ...(debouncedSearch && searchType === 'all' && { search: debouncedSearch }),
           ...filters,
         };
 
@@ -176,7 +188,7 @@ export default function ContactTable({
         setIsLoading(false);
       }
     },
-    [accessToken, filters, searchQuery],
+    [accessToken, filters, debouncedSearch, searchType],
   );
 
   // Initial load
@@ -551,20 +563,32 @@ export default function ContactTable({
         </div>
 
         {/* Search */}
-        <div className="relative w-full sm:w-80">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant"
-            aria-hidden="true"
-          />
-          <input
-            type="search"
-            role="searchbox"
-            aria-label="Rechercher un contact"
-            placeholder="Rechercher un contact..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
-          />
+        <div className="relative w-full sm:w-80 flex">
+          <select
+            value={searchType}
+            onChange={(e) => setSearchType(e.target.value as 'all' | 'tag' | 'location')}
+            aria-label="Type de recherche"
+            className="text-xs border border-r-0 border-outline-variant px-2 py-1 bg-surface rounded-l-lg rounded-r-none outline-none text-on-surface-variant focus:ring-2 focus:ring-primary/20 shrink-0"
+          >
+            <option value="all">Tous les champs</option>
+            <option value="tag">Tag</option>
+            <option value="location">Localisation</option>
+          </select>
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant pointer-events-none"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              role="searchbox"
+              aria-label="Rechercher un contact"
+              placeholder="Rechercher un contact..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-r-lg rounded-l-none border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+            />
+          </div>
         </div>
       </div>
 

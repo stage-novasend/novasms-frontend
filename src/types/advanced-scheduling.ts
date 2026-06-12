@@ -57,15 +57,12 @@ export type { BestTimeData, ScheduleAdvanced, ABReportData };
  * Mock Best Time Analyzer - En production utiliserait l'historique réel
  */
 export function analyzeBestSendTime(): BestTimeData {
-  // Simulé - en production, utiliserait les données analytics réelles
-  const hours = [6, 9, 12, 15, 18, 20];
-  const bestHour = hours[Math.floor(Math.random() * hours.length)];
-
+  // Valeurs par défaut basées sur les meilleures pratiques email marketing (10h mercredi)
   return {
-    hour: bestHour,
+    hour: 10,
     day: 'mercredi',
-    confidence: 75 + Math.random() * 20,
-    estimatedOpenRate: 35 + Math.random() * 15,
+    confidence: 80,
+    estimatedOpenRate: 38,
   };
 }
 
@@ -88,15 +85,14 @@ export function generateABReport(
   sentB: number,
   openedB: number,
   clickedB: number,
-  criteria: 'open-rate' | 'click-rate'
+  criteria: 'open-rate' | 'click-rate',
 ): ABReportData {
   const openRateA = sentA > 0 ? (openedA / sentA) * 100 : 0;
   const openRateB = sentB > 0 ? (openedB / sentB) * 100 : 0;
   const clickRateA = sentA > 0 ? (clickedA / sentA) * 100 : 0;
   const clickRateB = sentB > 0 ? (clickedB / sentB) * 100 : 0;
 
-  const winnerA =
-    criteria === 'open-rate' ? openRateA > openRateB : clickRateA > clickRateB;
+  const winnerA = criteria === 'open-rate' ? openRateA > openRateB : clickRateA > clickRateB;
 
   return {
     variantA: {

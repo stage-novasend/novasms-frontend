@@ -23,9 +23,7 @@ export const campaignApi = {
    */
   create: async (payload: CampaignAPICreateRequest): Promise<CampaignAPIResponse> => {
     try {
-      console.log('📡 Creating campaign:', payload);
       const response = await api.post<CampaignAPIResponse>('/campaigns', payload);
-      console.log('✅ Campaign created:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error creating campaign:', error);
@@ -46,7 +44,6 @@ export const campaignApi = {
     offset?: number;
   }): Promise<CampaignAPIListResponse> => {
     try {
-      console.log('📡 Fetching campaigns:', options);
       const params = new URLSearchParams();
       if (options?.status) params.append('status', options.status);
       if (options?.channel) params.append('channel', options.channel);
@@ -57,7 +54,6 @@ export const campaignApi = {
 
       const queryString = params.toString() ? `?${params.toString()}` : '';
       const response = await api.get<CampaignAPIListResponse>(`/campaigns${queryString}`);
-      console.log('✅ Campaigns retrieved:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching campaigns:', error);
@@ -71,9 +67,7 @@ export const campaignApi = {
    */
   get: async (id: string): Promise<CampaignAPIResponse> => {
     try {
-      console.log('📡 Fetching campaign:', id);
       const response = await api.get<CampaignAPIResponse>(`/campaigns/${id}`);
-      console.log('✅ Campaign retrieved:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching campaign:', error);
@@ -87,9 +81,7 @@ export const campaignApi = {
    */
   update: async (id: string, payload: CampaignAPIUpdateRequest): Promise<CampaignAPIResponse> => {
     try {
-      console.log('📡 Updating campaign:', id, payload);
       const response = await api.patch<CampaignAPIResponse>(`/campaigns/${id}`, payload);
-      console.log('✅ Campaign updated:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error updating campaign:', error);
@@ -103,9 +95,7 @@ export const campaignApi = {
    */
   delete: async (id: string): Promise<{ success: boolean }> => {
     try {
-      console.log('🗑️  Deleting campaign:', id);
       const response = await api.delete<{ success: boolean }>(`/campaigns/${id}`);
-      console.log('✅ Campaign deleted');
       return response.data;
     } catch (error) {
       console.error('❌ Error deleting campaign:', error);
@@ -119,9 +109,7 @@ export const campaignApi = {
    */
   duplicate: async (id: string): Promise<CampaignAPIResponse> => {
     try {
-      console.log('📄 Duplicating campaign:', id);
       const response = await api.post<CampaignAPIResponse>(`/campaigns/${id}/duplicate`, {});
-      console.log('✅ Campaign duplicated:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error duplicating campaign:', error);
@@ -135,9 +123,7 @@ export const campaignApi = {
    */
   send: async (id: string): Promise<CampaignAPIResponse> => {
     try {
-      console.log('🚀 Sending campaign:', id);
       const response = await api.post<CampaignAPIResponse>(`/campaigns/${id}/send`, {});
-      console.log('✅ Campaign sent:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error sending campaign:', error);
@@ -160,7 +146,6 @@ export const campaignApi = {
     bounced: number;
   }> => {
     try {
-      console.log('📊 Fetching analytics for campaign:', id);
       const response = await api.get<{
         sent: number;
         delivered: number;
@@ -169,7 +154,6 @@ export const campaignApi = {
         converted: number;
         bounced: number;
       }>(`/campaigns/${id}/analytics`);
-      console.log('✅ Analytics retrieved:', response.data);
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching analytics:', error);

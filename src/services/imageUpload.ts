@@ -42,7 +42,6 @@ class ImageUploadService {
       });
 
       const data = response.data;
-      console.log('✅ Image uploaded:', data);
       const uploadedImage: UploadedImage = {
         id: data.id,
         url: this.resolveImageUrl(data.url),

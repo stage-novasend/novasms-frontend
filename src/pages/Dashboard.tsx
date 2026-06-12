@@ -171,15 +171,18 @@ function DonutChart({
         }}
       />
     );
-  let cursor = 0;
   const parts = byChannel
-    .map(({ channel, count }) => {
-      const pct = count / total;
-      const seg = `${CHANNEL_COLORS[channel] || '#9ca3af'} ${Math.round(cursor * 100)}% ${Math.round((cursor + pct) * 100)}%`;
-      cursor += pct;
-      return seg;
-    })
-    .join(', ');
+    .reduce<{ cursor: number; segments: string[] }>(
+      (acc, { channel, count }) => {
+        const pct = count / total;
+        acc.segments.push(
+          `${CHANNEL_COLORS[channel] || '#9ca3af'} ${Math.round(acc.cursor * 100)}% ${Math.round((acc.cursor + pct) * 100)}%`,
+        );
+        return { cursor: acc.cursor + pct, segments: acc.segments };
+      },
+      { cursor: 0, segments: [] },
+    )
+    .segments.join(', ');
   return (
     <div
       style={{
@@ -222,6 +225,7 @@ export default function Dashboard() {
   const [contactsAddedToday, setContactsAddedToday] = useState(0);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [creditThreshold, setCreditThreshold] = useState<number | null>(null);
+  const [creditLimit, setCreditLimit] = useState<number | null>(null);
 
   useEffect(() => {
     void fetchCampaigns();
@@ -250,7 +254,9 @@ export default function Dashboard() {
           api.get<{ total: number }>(
             `/contacts?limit=1&dateAddedFrom=${encodeURIComponent(start.toISOString())}&dateAddedTo=${encodeURIComponent(end.toISOString())}`,
           ),
-          api.get<{ balance: number; alertThreshold: number | null }>('/account/balance'),
+          api.get<{ balance: number; alertThreshold: number | null; creditLimit: number | null }>(
+            '/account/balance',
+          ),
         ]);
 
         setAutomations(Array.isArray(automationsRes.data?.data) ? automationsRes.data.data : []);
@@ -264,6 +270,9 @@ export default function Dashboard() {
             ? balanceRes.data.alertThreshold
             : null,
         );
+        setCreditLimit(
+          typeof balanceRes.data?.creditLimit === 'number' ? balanceRes.data.creditLimit : null,
+        );
       } catch {
         setAutomations([]);
         setAuditLogs([]);
@@ -274,6 +283,22 @@ export default function Dashboard() {
     };
 
     void loadOperationalData();
+
+    const refreshBalance = () => {
+      api
+        .get<{ balance: number; alertThreshold: number | null; creditLimit: number | null }>(
+          '/account/balance',
+        )
+        .then((r) => {
+          if (typeof r.data?.balance === 'number') setCreditBalance(r.data.balance);
+          if (typeof r.data?.alertThreshold === 'number') setCreditThreshold(r.data.alertThreshold);
+          if (typeof r.data?.creditLimit === 'number') setCreditLimit(r.data.creditLimit);
+        })
+        .catch(() => {});
+    };
+
+    window.addEventListener('novasms:balance-refresh', refreshBalance);
+    return () => window.removeEventListener('novasms:balance-refresh', refreshBalance);
   }, []);
 
   const totalSent = overview?.messagesSent ?? 0;
@@ -309,9 +334,14 @@ export default function Dashboard() {
     (acc, item) => acc + Number(item.sendCount || 0),
     0,
   );
-  const creditThresholdSafe = creditThreshold && creditThreshold > 0 ? creditThreshold : 1;
+  const gaugeMax =
+    creditLimit && creditLimit > 0
+      ? creditLimit
+      : creditThreshold && creditThreshold > 0
+        ? creditThreshold * 3
+        : null;
   const creditProgress =
-    creditBalance != null ? Math.min((creditBalance / creditThresholdSafe) * 100, 100) : 0;
+    creditBalance != null && gaugeMax != null ? Math.min((creditBalance / gaugeMax) * 100, 100) : 0;
 
   if (activeDashboard === 2) {
     return (
@@ -364,6 +394,16 @@ export default function Dashboard() {
                 Recharger
               </Link>
             </div>
+            <div className="flex items-center gap-8">
+              <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {creditBalance == null ? '—' : creditBalance.toLocaleString('fr-FR')} FCFA
+              </span>
+              {gaugeMax != null && (
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  / {gaugeMax.toLocaleString('fr-FR')}
+                </span>
+              )}
+            </div>
             <div
               style={{ width: '100%', height: 8, borderRadius: 999, background: 'var(--border)' }}
             >
@@ -372,10 +412,21 @@ export default function Dashboard() {
                   width: `${creditProgress}%`,
                   height: '100%',
                   borderRadius: 999,
-                  background: 'var(--brand-gradient)',
+                  background:
+                    creditProgress < 20
+                      ? 'var(--color-error, #ef4444)'
+                      : creditProgress < 50
+                        ? '#f59e0b'
+                        : 'var(--brand-gradient)',
+                  transition: 'width 0.4s ease',
                 }}
               />
             </div>
+            {creditThreshold != null && (
+              <div className="text-xs text-muted">
+                Alerte sous {creditThreshold.toLocaleString('fr-FR')} FCFA
+              </div>
+            )}
           </div>
 
           <div
@@ -587,6 +638,7 @@ export default function Dashboard() {
 
       {/* Charts row */}
       <div
+        className="charts-row"
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0,1.65fr) minmax(0,1fr)',
@@ -734,40 +786,42 @@ export default function Dashboard() {
             </button>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Envois</th>
-                <th>Ouvertures</th>
-                <th>Clics</th>
-                <th>Taux clic</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {top5.map((c) => (
-                <tr
-                  key={c.id}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => navigate(`/campaigns/${c.id}`)}
-                >
-                  <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{c.name}</td>
-                  <td>{c.sentCount.toLocaleString('fr-FR')}</td>
-                  <td>{c.openedCount.toLocaleString('fr-FR')}</td>
-                  <td>{c.clickedCount.toLocaleString('fr-FR')}</td>
-                  <td style={{ color: '#16A34A', fontWeight: 600 }}>
-                    {c.sentCount > 0
-                      ? `${((c.clickedCount / c.sentCount) * 100).toFixed(1)}%`
-                      : '—'}
-                  </td>
-                  <td>
-                    <span className="tag green">Actif</span>
-                  </td>
+          <div className="data-table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Envois</th>
+                  <th>Ouvertures</th>
+                  <th>Clics</th>
+                  <th>Taux clic</th>
+                  <th>Statut</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {top5.map((c) => (
+                  <tr
+                    key={c.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => navigate(`/campaigns/${c.id}`)}
+                  >
+                    <td style={{ fontWeight: 500, color: 'var(--text-1)' }}>{c.name}</td>
+                    <td>{c.sentCount.toLocaleString('fr-FR')}</td>
+                    <td>{c.openedCount.toLocaleString('fr-FR')}</td>
+                    <td>{c.clickedCount.toLocaleString('fr-FR')}</td>
+                    <td style={{ color: '#16A34A', fontWeight: 600 }}>
+                      {c.sentCount > 0
+                        ? `${((c.clickedCount / c.sentCount) * 100).toFixed(1)}%`
+                        : '—'}
+                    </td>
+                    <td>
+                      <span className="tag green">Actif</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -776,38 +830,40 @@ export default function Dashboard() {
         <div className="card-title mb-12">
           Carte de chaleur d'engagement — {period} derniers jours
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '28px repeat(24, 1fr)',
-            gap: 2,
-            alignItems: 'center',
-          }}
-        >
-          <div />
-          {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} style={{ fontSize: 8, color: 'var(--text-3)', textAlign: 'center' }}>
-              {h}h
-            </div>
-          ))}
-          {DAYS_FR.map((day, di) => (
-            <>
-              <div key={`d${di}`} style={{ fontSize: 9, color: 'var(--text-2)' }}>
-                {day}
+        <div className="heatmap-wrapper">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '28px repeat(24, 1fr)',
+              gap: 2,
+              alignItems: 'center',
+            }}
+          >
+            <div />
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} style={{ fontSize: 8, color: 'var(--text-3)', textAlign: 'center' }}>
+                {h}h
               </div>
-              {Array.from({ length: 24 }, (_, h) => {
-                const row = heatmap.find((r) => r.hour === h);
-                const v = row ? Math.round(row.openCount * (0.7 + di * 0.05)) : 0;
-                return (
-                  <div
-                    key={`${di}-${h}`}
-                    className="hm-cell"
-                    style={{ background: heatColor(v, heatMax) }}
-                  />
-                );
-              })}
-            </>
-          ))}
+            ))}
+            {DAYS_FR.map((day, di) => (
+              <>
+                <div key={`d${di}`} style={{ fontSize: 9, color: 'var(--text-2)' }}>
+                  {day}
+                </div>
+                {Array.from({ length: 24 }, (_, h) => {
+                  const row = heatmap.find((r) => r.hour === h);
+                  const v = row ? Math.round(row.openCount * (0.7 + di * 0.05)) : 0;
+                  return (
+                    <div
+                      key={`${di}-${h}`}
+                      className="hm-cell"
+                      style={{ background: heatColor(v, heatMax) }}
+                    />
+                  );
+                })}
+              </>
+            ))}
+          </div>
         </div>
         <div
           className="flex items-center gap-8"

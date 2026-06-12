@@ -29,8 +29,8 @@ export default function SegmentBuilder({ onCreated }: SegmentBuilderProps) {
       if (!segment.id) throw new Error(json?.message || 'Erreur');
       onCreated?.({ id: segment.id, name: segment.name || name });
       alert(`Segment créé: ${segment.id}`);
-    } catch (e: any) {
-      alert('Erreur: ' + e.message);
+    } catch (e) {
+      alert('Erreur: ' + (e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

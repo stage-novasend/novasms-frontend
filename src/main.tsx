@@ -2,8 +2,21 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import './i18n'; // initialise i18next (détection langue + traductions FR/EN)
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+window.addEventListener('unhandledrejection', (event) => {
+  event.preventDefault();
+  console.error('[unhandledrejection]', event.reason);
+  toast.error('Une erreur inattendue est survenue. Veuillez reessayer.');
+});
+
+window.addEventListener('error', (event) => {
+  if (event.message?.includes('Loading chunk')) {
+    toast.error('Probleme de chargement. Actualisez la page.');
+  }
+});
 
 // Protected Routes & Layouts (toujours chargés)
 import ProtectedRoute from './features/auth/components/ProtectedRoute';
@@ -63,55 +76,57 @@ if (!rootElement) throw new Error('Root element not found');
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <React.Suspense fallback={<Fallback />}>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/produit" element={<Produit />} />
-          <Route path="/solutions" element={<Solutions />} />
-          <Route path="/tarifs" element={<Tarifs />} />
-          <Route path="/ressources" element={<Ressources />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <React.Suspense fallback={<Fallback />}>
+          <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/produit" element={<Produit />} />
+            <Route path="/solutions" element={<Solutions />} />
+            <Route path="/tarifs" element={<Tarifs />} />
+            <Route path="/ressources" element={<Ressources />} />
 
-          {/* Auth Routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/confirm-email" element={<ConfirmEmail />} />
-          <Route path="/verify-email/:token" element={<VerifyEmail />} />
-          <Route path="/confirmation-success" element={<ConfirmationSuccess />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
+            {/* Auth Routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/confirm-email" element={<ConfirmEmail />} />
+            <Route path="/verify-email/:token" element={<VerifyEmail />} />
+            <Route path="/confirmation-success" element={<ConfirmationSuccess />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
 
-          {/* Protected Routes with AppLayout */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/contacts" element={<Contacts />} />
-            <Route path="/contacts/:id" element={<ContactDetail />} />
-            <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/campaigns/new" element={<CampaignEditor />} />
-            <Route path="/campaigns/:id" element={<CampaignEditor />} />
-            <Route path="/campaigns/:id/edit" element={<CampaignEditor />} />
-            <Route path="/campaigns/:id/report" element={<CampaignReport />} />
-            <Route path="/automations" element={<Automations />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/segments" element={<Contacts />} />
-            <Route path="/rechargement" element={<Rechargement />} />
-            <Route path="/account/profile" element={<Profile />} />
-            <Route path="/account/security" element={<Security />} />
-            <Route path="/account/team" element={<Team />} />
-            <Route path="/account/settings" element={<Settings />} />
-            <Route path="/account/audit-logs" element={<AuditLogs />} />
-            <Route path="/account/integrations" element={<Integrations />} />
-          </Route>
-        </Routes>
-      </React.Suspense>
-      <Toaster position="top-right" richColors />
-    </BrowserRouter>
+            {/* Protected Routes with AppLayout */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/contacts" element={<Contacts />} />
+              <Route path="/contacts/:id" element={<ContactDetail />} />
+              <Route path="/campaigns" element={<Campaigns />} />
+              <Route path="/campaigns/new" element={<CampaignEditor />} />
+              <Route path="/campaigns/:id" element={<CampaignEditor />} />
+              <Route path="/campaigns/:id/edit" element={<CampaignEditor />} />
+              <Route path="/campaigns/:id/report" element={<CampaignReport />} />
+              <Route path="/automations" element={<Automations />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/segments" element={<Contacts />} />
+              <Route path="/rechargement" element={<Rechargement />} />
+              <Route path="/account/profile" element={<Profile />} />
+              <Route path="/account/security" element={<Security />} />
+              <Route path="/account/team" element={<Team />} />
+              <Route path="/account/settings" element={<Settings />} />
+              <Route path="/account/audit-logs" element={<AuditLogs />} />
+              <Route path="/account/integrations" element={<Integrations />} />
+            </Route>
+          </Routes>
+        </React.Suspense>
+        <Toaster position="top-right" richColors />
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>,
 );

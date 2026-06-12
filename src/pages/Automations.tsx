@@ -10,7 +10,7 @@ import {
 } from '@/api/automations';
 import { contactsApi } from '@/api/contacts';
 import { campaignApi } from '@/api/campaignApi';
-import type { CampaignAPICreateRequest, CampaignAPIResponse } from '@/types/campaign.types';
+import type { CampaignAPIResponse } from '@/types/campaign.types';
 import type { Contact, DynamicSegment } from '@/features/contacts/types/contact';
 import CanvasEditor from '@/components/CanvasEditor';
 
@@ -409,7 +409,6 @@ export default function Automations() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<CampaignAPIResponse[]>([]);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
-  const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [segments, setSegments] = useState<DynamicSegment[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -426,19 +425,6 @@ export default function Automations() {
     String(status ?? '')
       .trim()
       .toLowerCase();
-
-  const groupedCampaigns = useMemo(() => {
-    const sorted = [...campaigns].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
-
-    return {
-      automation: sorted.filter(
-        (campaign) => normalizeCampaignStatus(campaign.status) === 'automation',
-      ),
-      classic: [],
-    };
-  }, [campaigns]);
 
   const selectedAutomation = useMemo(
     () =>
@@ -532,8 +518,8 @@ export default function Automations() {
       setCampaignsLoading(true);
       try {
         const response = await campaignApi.list({
-          status: 'automation',
           channel: campaignChannel,
+          status: 'AUTOMATION',
           page: 1,
           limit: 100,
         });
@@ -665,66 +651,52 @@ export default function Automations() {
         return next;
       });
       toast.success('Workflow supprimé');
-    } catch (error: any) {
-      const message = error?.response?.data?.message || 'Impossible de supprimer ce workflow';
+    } catch (error) {
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Impossible de supprimer ce workflow';
       toast.error(String(message));
       console.error(error);
     }
   };
 
-  const handleQuickTest = () => {
+  const handleQuickTest = async () => {
     if (!selectedAutomation) {
       toast.error('Sélectionnez un workflow pour tester');
       return;
     }
 
-    toast.success(
-      `Test prêt: ${selectedAutomation.name} (${triggerLabel(selectedAutomation.trigger)} · ${formatDelay(selectedAutomation.delaySeconds)})`,
-    );
+    if (selectedAutomation.status !== 'Active') {
+      toast.error('Activez le workflow avant de lancer un test réel');
+      return;
+    }
+
+    const testContact = contacts[0];
+    if (!testContact) {
+      toast.error('Ajoutez au moins un contact pour tester le workflow');
+      return;
+    }
+
+    try {
+      await automationsApi.trigger(selectedAutomation.id, {
+        contactId: testContact.id,
+        delaySeconds: 0,
+      });
+      const label = [testContact.firstName, testContact.lastName].filter(Boolean).join(' ');
+      toast.success(
+        `Test lancé pour ${label || testContact.email || testContact.phone || 'le contact sélectionné'}`,
+      );
+      void loadAutomations();
+    } catch (error) {
+      toast.error('Impossible de lancer le test du workflow');
+      console.error(error);
+    }
   };
 
   const applyTemplate = (template: WorkflowTemplate) => {
     setDraft(template.draft);
     setSelectedTemplateKey(template.key);
     toast.info(`Modèle “${template.label}” prêt à être créé`);
-  };
-
-  const handleCreateAutomationCampaign = async () => {
-    if (!campaignChannel) {
-      toast.error('La campagne automation est disponible uniquement pour Email ou SMS');
-      return;
-    }
-
-    setCreatingCampaign(true);
-    try {
-      const baseName = draft.name.trim() || 'Campagne automation';
-      const payload: CampaignAPICreateRequest = {
-        name: `${baseName} · Campaign`,
-        channelType: campaignChannel,
-        status: 'AUTOMATION',
-        subject: campaignChannel === 'EMAIL' ? baseName : undefined,
-        content:
-          campaignChannel === 'SMS'
-            ? 'Message automatique. Repondez STOP pour vous desinscrire.'
-            : undefined,
-      };
-
-      const created = await campaignApi.create(payload);
-      const refreshed = await campaignApi.list({
-        status: 'automation',
-        channel: campaignChannel,
-        page: 1,
-        limit: 100,
-      });
-      setCampaigns(refreshed.data ?? []);
-      setDraft((current) => ({ ...current, campaignId: created.id }));
-      toast.success('Campagne automation créée et liée au workflow');
-    } catch (error) {
-      toast.error('Impossible de créer la campagne automation');
-      console.error(error);
-    } finally {
-      setCreatingCampaign(false);
-    }
   };
 
   return (
@@ -765,7 +737,7 @@ export default function Automations() {
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={handleQuickTest}
+              onClick={() => void handleQuickTest()}
               className="rounded-lg border border-outline-variant/40 bg-white px-3 py-2 text-xs font-semibold text-secondary transition hover:border-primary/50 hover:text-primary"
             >
               Tester
@@ -1319,21 +1291,12 @@ export default function Automations() {
                 <div className="mb-2 flex items-center gap-2">
                   <button
                     type="button"
-                    disabled={!campaignChannel || creatingCampaign}
-                    onClick={() => void handleCreateAutomationCampaign()}
-                    className="rounded-lg border border-outline-variant/40 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-secondary transition hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {creatingCampaign ? 'Création...' : 'Créer campagne automation'}
-                  </button>
-                  <button
-                    type="button"
                     disabled={!campaignChannel || campaignsLoading}
                     onClick={() => {
                       if (!campaignChannel) return;
                       setCampaignsLoading(true);
                       void campaignApi
                         .list({
-                          status: 'automation',
                           channel: campaignChannel,
                           page: 1,
                           limit: 100,
@@ -1351,8 +1314,13 @@ export default function Automations() {
                   </button>
                 </div>
                 <div className="mb-2 rounded-lg border border-dashed border-outline-variant/40 bg-surface/30 px-3 py-2 text-[11px] text-on-surface-variant">
-                  Le sélecteur n’affiche que les campagnes{' '}
-                  <span className="font-semibold text-secondary">Automatisations</span>.
+                  Sélectionnez une campagne existante. Créez-en une dans la section Campagnes.
+                  <a
+                    href="/campaigns"
+                    className="text-[11px] text-primary font-semibold underline ml-1"
+                  >
+                    Accéder aux campagnes →
+                  </a>
                 </div>
                 <select
                   id="automation-campaign-id"
@@ -1364,15 +1332,11 @@ export default function Automations() {
                   }
                 >
                   <option value="">Aucune campagne liée</option>
-                  {groupedCampaigns.automation.length > 0 && (
-                    <optgroup label="Automatisations">
-                      {groupedCampaigns.automation.map((campaign) => (
-                        <option key={campaign.id} value={campaign.id}>
-                          ⚡ {campaign.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </option>
+                  ))}
                 </select>
                 {campaignsLoading && (
                   <p className="text-[11px] text-on-surface-variant">Chargement des campagnes...</p>

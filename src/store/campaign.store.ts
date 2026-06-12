@@ -89,7 +89,7 @@ interface CampaignStore {
 }
 
 const generateStopCode = (): string => {
-  return Math.random().toString(36).substring(2, 7).toUpperCase();
+  return crypto.randomUUID().replace(/-/g, '').substring(0, 5).toUpperCase();
 };
 
 const INITIAL_DRAFT: CampaignDraft = {

@@ -1,13 +1,6 @@
 import React from 'react';
 
-type BlockType =
-  | 'text'
-  | 'image'
-  | 'button'
-  | 'product'
-  | 'social'
-  | 'separator'
-  | 'html';
+type BlockType = 'text' | 'image' | 'button' | 'product' | 'social' | 'separator' | 'html';
 type BlockAlignment = 'left' | 'center' | 'right';
 type Block = {
   id: string;
@@ -47,7 +40,7 @@ const TEMPLATE_LIBRARY = [
 ];
 
 function uid() {
-  return Math.random().toString(36).slice(2, 9);
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 9);
 }
 
 function createBlock(type: BlockType): Block {
@@ -66,7 +59,7 @@ function createBlock(type: BlockType): Block {
             ? 'Instagram · Facebook · WhatsApp'
             : type === 'html'
               ? '<div><h2>Mon HTML personnalisé</h2><p>Éditez ce code.</p></div>'
-            : '',
+              : '',
   };
 }
 
@@ -131,7 +124,8 @@ export default function CampaignBlocksEditor({
     const html = blocks
       .map((block) => {
         const alignment = block.alignment || DEFAULT_ALIGNMENT;
-        const alignStyle = alignment === 'center' ? 'center' : alignment === 'right' ? 'right' : 'left';
+        const alignStyle =
+          alignment === 'center' ? 'center' : alignment === 'right' ? 'right' : 'left';
         const paddingY = block.paddingY ?? DEFAULT_PADDING_Y;
         const paddingX = block.paddingX ?? DEFAULT_PADDING_X;
         const wrapperStyle = `padding:${paddingY}px ${paddingX}px;text-align:${alignStyle};`;
@@ -172,7 +166,9 @@ export default function CampaignBlocksEditor({
   }
 
   function updateBlock(id: string, patch: Partial<Block>) {
-    setBlocks((current) => current.map((block) => (block.id === id ? { ...block, ...patch } : block)));
+    setBlocks((current) =>
+      current.map((block) => (block.id === id ? { ...block, ...patch } : block)),
+    );
   }
 
   function updateSelectedBlock(patch: Partial<Block>) {
@@ -194,7 +190,8 @@ export default function CampaignBlocksEditor({
     setBlocks((current) => {
       const index = current.findIndex((block) => block.id === id);
       if (index === -1) return current;
-      const targetIndex = dir === 'up' ? Math.max(0, index - 1) : Math.min(current.length - 1, index + 1);
+      const targetIndex =
+        dir === 'up' ? Math.max(0, index - 1) : Math.min(current.length - 1, index + 1);
       const copy = current.slice();
       const [item] = copy.splice(index, 1);
       copy.splice(targetIndex, 0, item);
@@ -237,7 +234,9 @@ export default function CampaignBlocksEditor({
         className={`group block w-full border-b border-[var(--border)] text-left transition-colors ${isSelected ? 'bg-[rgba(46,200,10,0.08)]' : 'hover:bg-[rgba(46,200,10,0.04)]'}`}
       >
         <div className={`flex ${getAlignmentClass(alignment)}`} style={getPaddingStyle(block)}>
-          <div className={`${containerClass} ${isMobile && block.type === 'product' ? 'max-w-[320px]' : ''}`}>
+          <div
+            className={`${containerClass} ${isMobile && block.type === 'product' ? 'max-w-[320px]' : ''}`}
+          >
             <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
               <button
                 type="button"
@@ -426,11 +425,15 @@ export default function CampaignBlocksEditor({
           >
             <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 text-xs text-muted">
               <span>Prévisualisation {previewMode === 'mobile' ? 'mobile' : 'desktop'}</span>
-              <span>{blocks.length} bloc{blocks.length > 1 ? 's' : ''}</span>
+              <span>
+                {blocks.length} bloc{blocks.length > 1 ? 's' : ''}
+              </span>
             </div>
 
             <div className="bg-white">
-              {blocks.map((block, index) => renderBlockPreview(block, block.id === selectedBlockId, index))}
+              {blocks.map((block, index) =>
+                renderBlockPreview(block, block.id === selectedBlockId, index),
+              )}
 
               {blocks.length === 0 && (
                 <div className="p-8 text-center text-sm text-muted">
@@ -485,9 +488,7 @@ export default function CampaignBlocksEditor({
                 min="0"
                 max="80"
                 value={selectedBlock.paddingY ?? DEFAULT_PADDING_Y}
-                onChange={(event) =>
-                  updateSelectedBlock({ paddingY: Number(event.target.value) })
-                }
+                onChange={(event) => updateSelectedBlock({ paddingY: Number(event.target.value) })}
               />
             </div>
 
@@ -501,9 +502,7 @@ export default function CampaignBlocksEditor({
                 min="0"
                 max="80"
                 value={selectedBlock.paddingX ?? DEFAULT_PADDING_X}
-                onChange={(event) =>
-                  updateSelectedBlock({ paddingX: Number(event.target.value) })
-                }
+                onChange={(event) => updateSelectedBlock({ paddingX: Number(event.target.value) })}
               />
             </div>
 
@@ -595,11 +594,7 @@ export default function CampaignBlocksEditor({
                 .map((block) => {
                   const alignment = block.alignment || DEFAULT_ALIGNMENT;
                   const alignStyle =
-                    alignment === 'center'
-                      ? 'center'
-                      : alignment === 'right'
-                        ? 'right'
-                        : 'left';
+                    alignment === 'center' ? 'center' : alignment === 'right' ? 'right' : 'left';
                   const paddingY = block.paddingY ?? DEFAULT_PADDING_Y;
                   const paddingX = block.paddingX ?? DEFAULT_PADDING_X;
                   const wrapperStyle = `padding:${paddingY}px ${paddingX}px;text-align:${alignStyle};`;

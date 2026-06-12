@@ -63,12 +63,10 @@ const extractApiErrorMessage = (error: unknown, fallback: string): string => {
  */
 export async function getSegmentContactCount(segmentId: string): Promise<number> {
   try {
-    console.log('📡 Fetching segment contact count for:', segmentId);
     const response = await api.get<{ segmentId: string; count: number }>(
       `/contacts/segments/${segmentId}/count`,
     );
 
-    console.log('✅ Contact count retrieved:', response.data.count);
     return response.data.count || 0;
   } catch (error) {
     console.error('❌ Error fetching contact count:', error);
@@ -84,7 +82,6 @@ export async function saveCampaignDraft(
   draftData: Record<string, unknown>,
 ): Promise<CampaignResponse> {
   try {
-    console.log('💾 Saving campaign draft:', campaignId);
     const response = await api.post(`/campaigns/${campaignId}/save-draft`, draftData);
 
     if (!response.data?.success) {
@@ -94,7 +91,6 @@ export async function saveCampaignDraft(
       };
     }
 
-    console.log('✅ Draft saved successfully');
     return {
       success: true,
       data: response.data.data,
@@ -120,7 +116,6 @@ export async function sendCampaign(
   },
 ): Promise<CampaignResponse> {
   try {
-    console.log('🚀 Sending campaign:', campaignId, options);
     const response = await api.post(`/campaigns/${campaignId}/send`, options || {});
 
     if (!response.data.success) {
@@ -130,7 +125,6 @@ export async function sendCampaign(
       };
     }
 
-    console.log('✅ Campaign sent successfully');
     return {
       success: true,
       data: response.data,
@@ -179,7 +173,6 @@ export async function validateCampaignSchedule(
  */
 export async function cancelCampaign(campaignId: string): Promise<CampaignResponse> {
   try {
-    console.log('⏹️  Cancelling campaign:', campaignId);
     const response = await api.post(`/campaigns/${campaignId}/cancel`, {});
 
     if (!response.data.success) {
@@ -189,7 +182,6 @@ export async function cancelCampaign(campaignId: string): Promise<CampaignRespon
       };
     }
 
-    console.log('✅ Campaign cancelled successfully');
     return {
       success: true,
       data: response.data,
@@ -209,10 +201,8 @@ export async function cancelCampaign(campaignId: string): Promise<CampaignRespon
  */
 export async function getCampaignDetails(campaignId: string): Promise<CampaignResponse> {
   try {
-    console.log('📖 Fetching campaign details:', campaignId);
     const response = await api.get(`/campaigns/${campaignId}`);
 
-    console.log('✅ Campaign details retrieved');
     return {
       success: true,
       data: response.data,

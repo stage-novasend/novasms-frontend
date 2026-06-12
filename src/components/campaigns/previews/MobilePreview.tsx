@@ -36,7 +36,7 @@ export const MobilePreview: FC<MobilePreviewProps> = ({ type, emailContent, smsC
             <img
               src={imageUploadService.getThumbnail(block.content.src)}
               alt={typeof block.content.alt === 'string' ? block.content.alt : 'Image'}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           ) : (
             <span className="material-symbols-outlined text-sm">image</span>

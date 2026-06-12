@@ -41,7 +41,6 @@ export default function Login() {
           rememberMe: false,
           sessionExpiresAt: null,
         });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const redirectAfterAuth = () => {

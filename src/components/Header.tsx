@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/stores/authStore';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useCampaignActions } from '@/hooks/useCampaign';
+import { useUiStore } from '@/stores/uiStore';
 import api from '@/api/axios';
 import {
   Bell,
@@ -43,8 +44,9 @@ const PAGE_TITLES: Record<string, string> = {
 };
 
 interface Balance {
-  creditBalance: number;
+  balance: number;
   alertThreshold: number | null;
+  creditLimit: number | null;
 }
 
 interface AuditLogItem {
@@ -176,6 +178,7 @@ export default function Header() {
   const { user, logout } = useAuthStore();
   const { createNewCampaign } = useCampaignActions();
   const { t, i18n } = useTranslation();
+  const { toggleMobileSidebar } = useUiStore();
   const [showMenu, setShowMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [balance, setBalance] = useState<Balance | null>(null);
@@ -184,11 +187,21 @@ export default function Header() {
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const fetchBalance = () => {
     api
       .get<Balance>('/account/balance')
       .then((r) => setBalance(r.data))
       .catch(() => setBalance(null));
+  };
+
+  useEffect(() => {
+    fetchBalance();
+    const timer = window.setInterval(fetchBalance, 30_000);
+    window.addEventListener('novasms:balance-refresh', fetchBalance);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('novasms:balance-refresh', fetchBalance);
+    };
   }, []);
 
   const loadNotifications = async () => {
@@ -244,12 +257,17 @@ export default function Header() {
   });
   const firstName = user?.name ? user.name.split(' ')[0] : (user?.email?.split('@')[0] ?? 'vous');
 
-  const credits = balance?.creditBalance ?? null;
+  const credits = balance?.balance ?? null;
   const alertThreshold = balance?.alertThreshold ?? null;
+  const creditLimit = balance?.creditLimit ?? null;
+  const gaugeMax =
+    creditLimit && creditLimit > 0
+      ? creditLimit
+      : alertThreshold && alertThreshold > 0
+        ? alertThreshold * 3
+        : null;
   const creditsPct =
-    credits != null && alertThreshold != null && alertThreshold > 0
-      ? Math.min(100, Math.round((credits / (alertThreshold * 3)) * 100))
-      : 38;
+    credits != null && gaugeMax != null ? Math.min(100, Math.round((credits / gaugeMax) * 100)) : 0;
 
   const notifications = useMemo(() => {
     const items = recentLogs.map(buildNotification);
@@ -298,6 +316,20 @@ export default function Header() {
 
   return (
     <header className="header">
+      {/* Hamburger — visible on mobile only via CSS */}
+      <button
+        type="button"
+        className="mobile-menu-btn"
+        onClick={toggleMobileSidebar}
+        aria-label="Menu"
+      >
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect y="3" width="18" height="2" rx="1" fill="currentColor" />
+          <rect y="8" width="18" height="2" rx="1" fill="currentColor" />
+          <rect y="13" width="18" height="2" rx="1" fill="currentColor" />
+        </svg>
+      </button>
+
       <div className="hdr-title">
         <h1 style={{ textTransform: 'capitalize' }}>{pageTitle}</h1>
         <p style={{ textTransform: 'capitalize' }}>
@@ -323,9 +355,11 @@ export default function Header() {
             </div>
             <div className="credits-hint">
               {creditsPct}% restant
-              {alertThreshold
-                ? ` · Alerte sous ${alertThreshold.toLocaleString('fr-FR')} FCFA`
-                : ''}
+              {creditLimit
+                ? ` · Limite ${creditLimit.toLocaleString('fr-FR')} FCFA`
+                : alertThreshold
+                  ? ` · Alerte sous ${alertThreshold.toLocaleString('fr-FR')} FCFA`
+                  : ''}
             </div>
           </div>
         </div>

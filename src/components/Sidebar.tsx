@@ -184,6 +184,7 @@ function Item({
   badge,
   collapsed,
   id,
+  onNavigate,
 }: {
   to: string;
   icon: ReactNode;
@@ -191,9 +192,15 @@ function Item({
   badge?: string;
   collapsed: boolean;
   id?: string;
+  onNavigate?: () => void;
 }) {
   return (
-    <NavLink to={to} id={id} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+    <NavLink
+      to={to}
+      id={id}
+      className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+      onClick={onNavigate}
+    >
       <span className="nav-icon" aria-hidden="true">
         {icon}
       </span>
@@ -209,7 +216,10 @@ export default function Sidebar() {
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
   const { contactsTotal, credits, loading, refresh } = useAppMetrics();
-  const { activeDashboard, toggleDashboard } = useUiStore();
+  const { activeDashboard, toggleDashboard, mobileSidebarOpen, setMobileSidebarOpen } =
+    useUiStore();
+
+  const closeMobile = () => setMobileSidebarOpen(false);
   const dashboardClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleDashboardClick = (e: React.MouseEvent) => {
@@ -252,7 +262,9 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <aside
+      className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileSidebarOpen ? 'mobile-open' : ''}`}
+    >
       <div className="sb-logo">
         <div className="sb-logomark">N</div>
         {!collapsed && (
@@ -293,7 +305,10 @@ export default function Sidebar() {
         {!collapsed && <div className="sb-section-label">Principal</div>}
         <a
           href="/dashboard"
-          onClick={handleDashboardClick}
+          onClick={(e) => {
+            closeMobile();
+            handleDashboardClick(e);
+          }}
           onDoubleClick={handleDashboardDoubleClick}
           className={`nav-item ${location.pathname === '/dashboard' ? 'active' : ''}`}
           title={`Double-clic pour basculer vers le tableau ${activeDashboard === 1 ? 'opérationnel' : 'analytique'}`}
@@ -310,6 +325,7 @@ export default function Sidebar() {
           label="Contacts"
           badge={contactsTotal > 0 ? contactsTotal.toLocaleString('fr-FR') : undefined}
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
         <Item
           to="/campaigns"
@@ -317,6 +333,7 @@ export default function Sidebar() {
           icon={<CampaignsIcon />}
           label="Campagnes"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
         <Item
           to="/automations"
@@ -324,6 +341,7 @@ export default function Sidebar() {
           icon={<AutomationsIcon />}
           label="Automatisations"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
         <Item
           to="/analytics"
@@ -331,6 +349,7 @@ export default function Sidebar() {
           icon={<AnalyticsIcon />}
           label="Analytics"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
 
         <div className="sb-divider" />
@@ -341,25 +360,28 @@ export default function Sidebar() {
           icon={<CreditsIcon />}
           label="Crédits"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
         <Item
           to="/account/security"
           icon={<SecurityIcon />}
           label="Sécurité"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
-        <Item to="/account/team" icon={<TeamIcon />} label="Équipe" collapsed={collapsed} />
         <Item
-          to="/account/integrations"
-          icon={<SettingsIcon />}
-          label="Intégrations"
+          to="/account/team"
+          icon={<TeamIcon />}
+          label="Équipe"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
         <Item
           to="/account/settings"
           icon={<SettingsIcon />}
           label="Paramètres"
           collapsed={collapsed}
+          onNavigate={closeMobile}
         />
       </div>
       <div className="sb-footer">

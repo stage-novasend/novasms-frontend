@@ -1,85 +1,250 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/api/axios';
 import { toast } from 'sonner';
+import {
+  WaveIcon,
+  OrangeMoneyIcon,
+  MomoIcon,
+  MoovIcon,
+  NovaSendIcon,
+  VisaIcon,
+  StripeIcon,
+} from '@/components/provider-icons';
 
-type Operator = 'orange' | 'mtn' | 'wave' | 'moov';
+type Operator = 'WAVE' | 'ORANGE' | 'MOMO' | 'MOOV' | 'NOVASEND';
 type PayTab = 'mobile' | 'visa';
+type ReceiptKind = 'mobile' | 'visa';
 
-const OPERATORS: { id: Operator; emoji: string; label: string }[] = [
-  { id: 'orange', emoji: '🟠', label: 'Orange Money' },
-  { id: 'mtn', emoji: '🟡', label: 'MTN MoMo' },
-  { id: 'wave', emoji: '🔵', label: 'Wave' },
-  { id: 'moov', emoji: '🟢', label: 'Moov Money' },
+const OPERATOR_RULES: Record<
+  Exclude<Operator, 'NOVASEND'>,
+  { min: number; max: number; prefixes: string[]; hint: string }
+> = {
+  WAVE: {
+    min: 500,
+    max: 500_000,
+    prefixes: ['01', '05', '07', '27'],
+    hint: 'Numéros Wave CI : 01, 05, 07, 27…',
+  },
+  ORANGE: {
+    min: 500,
+    max: 300_000,
+    prefixes: ['05', '07', '25', '45', '47', '57', '65', '67', '77', '87', '97'],
+    hint: 'Numéros Orange CI : 07, 05, 47, 57…',
+  },
+  MOMO: {
+    min: 500,
+    max: 500_000,
+    prefixes: ['05', '25', '45', '65'],
+    hint: 'Numéros MTN CI : 05, 25, 45, 65…',
+  },
+  MOOV: {
+    min: 500,
+    max: 300_000,
+    prefixes: ['01', '41', '61'],
+    hint: 'Numéros Moov CI : 01, 41, 61…',
+  },
+};
+
+const OPERATORS: {
+  id: Operator;
+  label: string;
+  sub: string;
+  Icon: React.FC<{ size?: number }>;
+}[] = [
+  { id: 'WAVE', label: 'Wave', sub: 'Sénégal · CI', Icon: WaveIcon },
+  { id: 'ORANGE', label: 'Orange Money', sub: 'CI · Mali · Sénégal', Icon: OrangeMoneyIcon },
+  { id: 'MOMO', label: 'MTN MoMo', sub: 'CI · Ghana · Cameroun', Icon: MomoIcon },
+  { id: 'MOOV', label: 'Moov Money', sub: 'CI · Bénin · Togo', Icon: MoovIcon },
+  { id: 'NOVASEND', label: 'NovaSend', sub: "Afrique de l'Ouest", Icon: NovaSendIcon },
 ];
 
-const AMOUNTS = [5000, 10000, 25000, 50000];
+const AMOUNTS = [5_000, 10_000, 25_000, 50_000];
 
 export default function Rechargement() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<PayTab>('mobile');
-  const [operator, setOperator] = useState<Operator>('orange');
+  const [operator, setOperator] = useState<Operator>('WAVE');
   const [phone, setPhone] = useState('');
-  const [amount, setAmount] = useState<number>(10000);
+  const [amount, setAmount] = useState<number>(10_000);
   const [customAmount, setCustomAmount] = useState('');
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState(['', '', '', '']);
   const [loading, setLoading] = useState(false);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Carte Visa
   const [cardNum, setCardNum] = useState('');
   const [cardExp, setCardExp] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [cardName, setCardName] = useState('');
 
-  // Succès
   const [success, setSuccess] = useState(false);
   const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [receiptKind, setReceiptKind] = useState<ReceiptKind>('mobile');
   const [paidAmount, setPaidAmount] = useState(0);
   const [downloadLoading, setDownloadLoading] = useState(false);
 
-  const finalAmount = amount || Number(customAmount) || 0;
-  // Crédits reçus = montant payé (pas d'ajout de solde fictif hardcodé)
-  const creditsAfter = finalAmount;
+  // ── Polling / waiting payment ───────────────────────────────────────────────
+  const [waitingPayment, setWaitingPayment] = useState(false);
+  const [, setPendingTxId] = useState<string | null>(null);
+  const [pendingAmount, setPendingAmount] = useState(0);
+  const [pendingOperator, setPendingOperator] = useState<Operator>('WAVE');
+  const [wavePaymentUrl, setWavePaymentUrl] = useState<string | null>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function handleSendOtp() {
-    if (!phone || phone.length < 8) {
-      toast.error('Numéro invalide');
-      return;
+  const parsedCustomAmount = Number(customAmount.replace(/\s/g, '')) || 0;
+  const finalAmount = parsedCustomAmount || amount || 0;
+
+  // ── Inline validation ───────────────────────────────────────────────────────
+  const phoneDigits = phone.replace(/\D/g, '');
+  const rules = OPERATOR_RULES[operator as Exclude<Operator, 'NOVASEND'>] ?? null;
+
+  const phoneError: string | null = (() => {
+    if (!phoneDigits) return null;
+    if (phoneDigits.length !== 10)
+      return `Numéro CI : 10 chiffres requis (${phoneDigits.length} saisi${phoneDigits.length > 1 ? 's' : ''})`;
+    if (rules && !rules.prefixes.includes(phoneDigits.slice(0, 2)))
+      return `Préfixe invalide pour ${operator}. Attendus : ${rules.prefixes.join(', ')}`;
+    return null;
+  })();
+
+  const amountError: string | null = (() => {
+    if (!finalAmount) return null;
+    const min = rules?.min ?? 500;
+    const max = rules?.max ?? 1_000_000;
+    if (finalAmount < min) return `Minimum ${min.toLocaleString('fr-FR')} FCFA pour ${operator}`;
+    if (finalAmount > max) return `Maximum ${max.toLocaleString('fr-FR')} FCFA pour ${operator}`;
+    return null;
+  })();
+
+  const otpError: string | null =
+    operator === 'ORANGE' && tab === 'mobile' && otp.some((d) => d === '')
+      ? 'Code OTP requis (4 chiffres via #144*82#)'
+      : null;
+
+  const mobileFormInvalid =
+    !phoneDigits ||
+    !!phoneError ||
+    !!amountError ||
+    !finalAmount ||
+    (operator === 'ORANGE' && !!otpError);
+
+  function stopPolling() {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
     }
-    setOtpSent(true);
-    toast.success('Code OTP envoyé par SMS');
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+  }
+
+  function startPolling(txId: string, paid: number) {
+    stopPolling();
+
+    pollingRef.current = setInterval(() => {
+      void (async () => {
+        try {
+          const res = await api.get<{ success: boolean; status: string }>(
+            `/mobile-money/${txId}/status`,
+          );
+          if (res.data.status === 'completed') {
+            stopPolling();
+            setWaitingPayment(false);
+            setPaidAmount(paid);
+            setTransactionId(txId);
+            setReceiptKind('mobile');
+            setSuccess(true);
+            toast.success('Paiement confirmé ! Crédits ajoutés.');
+            window.dispatchEvent(new CustomEvent('novasms:balance-refresh'));
+          } else if (res.data.status === 'failed') {
+            stopPolling();
+            setWaitingPayment(false);
+            toast.error("Paiement refusé par l'opérateur. Veuillez réessayer.");
+          }
+        } catch {
+          /* réseau — on continue de poller */
+        }
+      })();
+    }, 3_000);
+
+    pollingTimeoutRef.current = setTimeout(() => {
+      stopPolling();
+      setWaitingPayment(false);
+      toast.error('Délai de paiement dépassé (2 min). Veuillez réessayer.');
+    }, 120_000);
   }
 
   async function handleConfirm() {
+    const paid = finalAmount;
+
     if (tab === 'mobile') {
-      const code = otp.join('');
-      if (code.length < 6) {
-        toast.error('Entrez le code OTP à 6 chiffres');
+      if (mobileFormInvalid) {
+        toast.error(phoneError ?? amountError ?? otpError ?? 'Formulaire incomplet');
         return;
       }
+    } else if (!cardName.trim() || !cardNum.trim() || !cardExp.trim() || !cardCvv.trim()) {
+      toast.error('Complétez toutes les informations de la carte');
+      return;
     }
+
     setLoading(true);
     try {
-      const paid = finalAmount || Number(customAmount) || 0;
-      const res = await api.post('/payments/recharge', {
-        amount: paid,
-        method: tab === 'mobile' ? operator : 'visa',
-        phone: tab === 'mobile' ? `+225${phone.replace(/\s/g, '')}` : undefined,
-        otp: tab === 'mobile' ? otp.join('') : undefined,
-        card:
-          tab === 'visa'
-            ? { number: cardNum, expiry: cardExp, cvv: cardCvv, name: cardName }
-            : undefined,
-      });
-      const txId: string | null = (res.data as { transactionId?: string })?.transactionId ?? null;
-      setPaidAmount(paid);
-      setTransactionId(txId);
-      setSuccess(true);
-      toast.success('Paiement confirmé ! Crédits ajoutés.');
-    } catch {
-      toast.error('Échec du paiement. Vérifiez vos informations.');
+      if (tab === 'mobile') {
+        const initiateRes = await api.post('/mobile-money/initiate', {
+          operator,
+          phoneNumber: `+225${phone.replace(/\D/g, '')}`,
+          amount: paid,
+          currency: 'XOF',
+          country: 'CI',
+          description: 'Recharge crédit NovaSMS',
+          ...(operator === 'ORANGE' ? { otp: otp.join('') } : {}),
+        });
+
+        const initiateData = initiateRes.data as {
+          transactionId?: string;
+          transaction?: { id?: string };
+          paymentUrl?: string;
+        };
+        const txId = initiateData?.transactionId ?? initiateData?.transaction?.id ?? null;
+        if (!txId) throw new Error('Transaction introuvable — réessayez');
+
+        const pUrl = initiateData.paymentUrl ?? null;
+        if (operator === 'WAVE' && pUrl) {
+          window.open(pUrl, '_blank', 'noopener,noreferrer');
+        }
+
+        setPendingTxId(txId);
+        setPendingAmount(paid);
+        setPendingOperator(operator);
+        setWavePaymentUrl(operator === 'WAVE' ? pUrl : null);
+        setWaitingPayment(true);
+        startPolling(txId, paid);
+      } else {
+        // Visa — flux direct inchangé
+        const [expiryMonth = '', expiryYearRaw = ''] = cardExp.split('/');
+        const expiryYear = expiryYearRaw.length === 2 ? `20${expiryYearRaw}` : expiryYearRaw;
+        const visaRes = await api.post('/transactions/visa', {
+          amount: paid,
+          cardName: cardName.trim(),
+          cardNumber: cardNum.replace(/\s/g, ''),
+          expiryMonth,
+          expiryYear,
+          cvv: cardCvv,
+        });
+        const txId = (visaRes.data as { transactionId?: string })?.transactionId ?? null;
+        setPaidAmount(paid);
+        setTransactionId(txId);
+        setReceiptKind('visa');
+        setSuccess(true);
+        toast.success('Paiement confirmé ! Crédits ajoutés.');
+        window.dispatchEvent(new CustomEvent('novasms:balance-refresh'));
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Échec du paiement. Vérifiez vos informations.';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -89,9 +254,11 @@ export default function Rechargement() {
     if (!transactionId) return;
     setDownloadLoading(true);
     try {
-      const res = await api.get(`/transactions/${transactionId}/receipt`, {
-        responseType: 'blob',
-      });
+      const receiptUrl =
+        receiptKind === 'mobile'
+          ? `/mobile-money/transactions/${transactionId}/receipt`
+          : `/transactions/${transactionId}/receipt`;
+      const res = await api.get(receiptUrl, { responseType: 'blob' });
       const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -111,140 +278,252 @@ export default function Rechargement() {
     const newOtp = [...otp];
     newOtp[i] = digit;
     setOtp(newOtp);
-    if (digit && i < 5) otpRefs.current[i + 1]?.focus();
+    if (digit && i < 3) otpRefs.current[i + 1]?.focus();
+  }
+
+  useEffect(() => () => stopPolling(), []); // cleanup on unmount
+
+  const OPERATOR_WAIT: Record<
+    Exclude<Operator, 'NOVASEND'>,
+    { label: string; instruction: string | null; ussd: string | null }
+  > = {
+    WAVE: {
+      label: 'Wave',
+      instruction: 'Confirmez le paiement dans votre application Wave Mobile.',
+      ussd: null,
+    },
+    ORANGE: {
+      label: 'Orange Money',
+      instruction: 'Votre code OTP a été transmis. En attente de confirmation Orange Money.',
+      ussd: null,
+    },
+    MOMO: {
+      label: 'MTN MoMo',
+      instruction: 'Une notification push a été envoyée sur votre téléphone.',
+      ussd: '*133#',
+    },
+    MOOV: {
+      label: 'Moov Money',
+      instruction: 'Une notification push a été envoyée sur votre téléphone.',
+      ussd: '*155#',
+    },
+  };
+  const waitInfo = OPERATOR_WAIT[pendingOperator as Exclude<Operator, 'NOVASEND'>] ?? null;
+
+  // ── Écran d'attente paiement ───────────────────────────────────────────────
+  if (waitingPayment) {
+    return (
+      <div
+        className="content"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '70vh',
+          padding: '24px 20px',
+        }}
+      >
+        <div style={{ width: '100%', maxWidth: 480 }}>
+          <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+            {/* Spinner */}
+            <div style={{ margin: '0 auto 24px', width: 64, height: 64, position: 'relative' }}>
+              <svg
+                viewBox="0 0 64 64"
+                style={{ width: 64, height: 64, animation: 'spin 1.1s linear infinite' }}
+              >
+                <circle cx="32" cy="32" r="28" fill="none" stroke="var(--border)" strokeWidth="5" />
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="28"
+                  fill="none"
+                  stroke="#0c5460"
+                  strokeWidth="5"
+                  strokeDasharray="88 88"
+                  strokeDashoffset="22"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', marginBottom: 8 }}>
+              Paiement en attente
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 20 }}>
+              {waitInfo?.instruction ?? 'Validation en cours…'}
+            </div>
+
+            {/* USSD fallback */}
+            {waitInfo?.ussd && (
+              <div
+                style={{
+                  margin: '0 auto 20px',
+                  maxWidth: 340,
+                  padding: '12px 16px',
+                  background: '#fffbeb',
+                  border: '1px solid #fcd34d',
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.6 }}>
+                  Si le pop-up de validation n'apparaît pas, composez{' '}
+                  <strong style={{ fontFamily: 'monospace', fontSize: 13 }}>{waitInfo.ussd}</strong>{' '}
+                  sur votre téléphone pour valider l'opération en attente.
+                </div>
+              </div>
+            )}
+
+            {/* Wave — bouton ré-ouvrir */}
+            {pendingOperator === 'WAVE' && wavePaymentUrl && (
+              <div style={{ marginBottom: 20 }}>
+                <button
+                  className="btn-primary"
+                  onClick={() => window.open(wavePaymentUrl, '_blank', 'noopener,noreferrer')}
+                  style={{ fontSize: 13 }}
+                >
+                  Ouvrir Wave →
+                </button>
+              </div>
+            )}
+
+            <div
+              style={{
+                padding: '10px 16px',
+                background: 'var(--muted)',
+                borderRadius: 8,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 28,
+              }}
+            >
+              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Montant :</span>
+              <strong style={{ fontSize: 15, color: '#0c5460' }}>
+                {pendingAmount.toLocaleString('fr-FR')} FCFA
+              </strong>
+            </div>
+
+            <div>
+              <button
+                className="btn-outline"
+                onClick={() => {
+                  stopPolling();
+                  setWaitingPayment(false);
+                }}
+                style={{ fontSize: 12 }}
+              >
+                Annuler et revenir
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Écran de succès ────────────────────────────────────────────────────────
   if (success) {
     return (
       <div
-        id="tour-rechargement-header"
+        className="content"
         style={{
-          flex: 1,
-          minWidth: 0,
           display: 'flex',
-          flexDirection: 'column',
-          overflow: 'auto',
-          background: 'var(--bg)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '70vh',
+          padding: '24px 20px',
         }}
       >
-        <div
-          style={{
-            flex: 1,
-            padding: '18px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div style={{ width: '100%', maxWidth: 520 }}>
-            <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-              {/* Icône check */}
+        <div style={{ width: '100%', maxWidth: 480 }}>
+          <div className="card" style={{ padding: 48, textAlign: 'center' }}>
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg,#2ec80a,#aaee22)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 24px',
+              }}
+            >
+              <svg
+                width="36"
+                height="36"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-1)', marginBottom: 8 }}>
+              Paiement confirmé !
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 28 }}>
+              Vos crédits ont été ajoutés instantanément.
+            </div>
+            <div style={{ fontSize: 42, fontWeight: 900, color: '#0c5460', lineHeight: 1.1 }}>
+              {paidAmount.toLocaleString('fr-FR')} FCFA
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4, marginBottom: 36 }}>
+              rechargés avec succès
+            </div>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              {transactionId && (
+                <button
+                  className="btn-primary"
+                  onClick={handleDownloadReceipt}
+                  disabled={downloadLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  {downloadLoading ? 'Génération…' : 'Télécharger le reçu'}
+                </button>
+              )}
+              <button
+                className="btn-outline"
+                onClick={() => navigate('/dashboard')}
+                style={{ fontSize: 13 }}
+              >
+                Retour au dashboard →
+              </button>
+            </div>
+            {transactionId && (
               <div
                 style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg,#2ec80a,#aaee22)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 24px',
+                  marginTop: 24,
+                  padding: '8px 14px',
+                  background: 'var(--muted)',
+                  borderRadius: 8,
+                  fontSize: 11,
+                  color: 'var(--text-2)',
                 }}
               >
-                <svg
-                  width="40"
-                  height="40"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="white"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
+                Référence :{' '}
+                <span style={{ fontWeight: 600, color: 'var(--text-1)', fontFamily: 'monospace' }}>
+                  {transactionId}
+                </span>
               </div>
-
-              <div
-                style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-1)', marginBottom: 8 }}
-              >
-                Paiement confirmé !
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 28 }}>
-                Vos crédits ont été ajoutés instantanément à votre compte.
-              </div>
-
-              <div style={{ fontSize: 44, fontWeight: 900, color: '#0c5460', lineHeight: 1.1 }}>
-                {paidAmount.toLocaleString('fr-FR')} FCFA
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4, marginBottom: 36 }}>
-                rechargés avec succès
-              </div>
-
-              {/* Boutons */}
-              <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-                {transactionId && (
-                  <button
-                    className="btn-primary"
-                    onClick={handleDownloadReceipt}
-                    disabled={downloadLoading}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '11px 22px',
-                      fontSize: 13,
-                    }}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    {downloadLoading ? 'Génération…' : 'Télécharger le reçu PDF'}
-                  </button>
-                )}
-                <button
-                  className="btn-outline"
-                  onClick={() => navigate('/dashboard')}
-                  style={{ padding: '11px 22px', fontSize: 13 }}
-                >
-                  Retour au dashboard →
-                </button>
-              </div>
-
-              {/* Référence transaction */}
-              {transactionId && (
-                <div
-                  style={{
-                    marginTop: 28,
-                    padding: '10px 16px',
-                    background: 'var(--muted)',
-                    borderRadius: 8,
-                    fontSize: 11,
-                    color: 'var(--text-2)',
-                  }}
-                >
-                  Référence :{' '}
-                  <span
-                    style={{ fontWeight: 600, color: 'var(--text-1)', fontFamily: 'monospace' }}
-                  >
-                    {transactionId}
-                  </span>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -253,273 +532,331 @@ export default function Rechargement() {
 
   // ── Formulaire de paiement ─────────────────────────────────────────────────
   return (
-    <div
-      style={{
-        flex: 1,
-        minWidth: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'auto',
-        background: 'var(--bg)',
-      }}
-    >
+    <div className="content" style={{ padding: '20px 16px' }}>
       <div
         style={{
-          flex: 1,
-          padding: '18px 20px',
+          maxWidth: 680,
+          margin: '0 auto',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
           gap: 16,
         }}
       >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: 680,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-          }}
-        >
-          {/* Card principale */}
-          <div className="card" style={{ padding: 24 }}>
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>
-                Choisissez votre mode de paiement
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
-                Paiement sécurisé · Créditage instantané
-              </div>
+        <div className="card" style={{ padding: 24 }}>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)' }}>
+              Recharger votre compte
             </div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>
+              Paiement sécurisé · Créditage instantané
+            </div>
+          </div>
 
-            {/* Tabs */}
-            <div
-              style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}
+          {/* Tabs */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 0,
+              borderRadius: 10,
+              overflow: 'hidden',
+              border: '1px solid var(--border)',
+              marginBottom: 24,
+            }}
+          >
+            <button
+              onClick={() => setTab('mobile')}
+              style={{
+                padding: '12px 8px',
+                fontSize: 13,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                background: tab === 'mobile' ? '#0c5460' : 'var(--surface)',
+                color: tab === 'mobile' ? 'white' : 'var(--text-2)',
+                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
             >
-              <button
-                onClick={() => setTab('mobile')}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background:
-                    tab === 'mobile' ? 'linear-gradient(135deg,#2ec80a,#aaee22)' : 'var(--muted)',
-                  color: tab === 'mobile' ? '#0c5460' : 'var(--text-2)',
-                  borderRadius: '10px 0 0 10px',
-                }}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <div style={{ fontSize: 18, marginBottom: 2 }}>📱</div>
-                Mobile Money
-              </button>
-              <button
-                onClick={() => setTab('visa')}
-                style={{
-                  flex: 1,
-                  padding: 10,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background:
-                    tab === 'visa' ? 'linear-gradient(135deg,#2ec80a,#aaee22)' : 'var(--muted)',
-                  color: tab === 'visa' ? '#0c5460' : 'var(--text-2)',
-                  borderRadius: '0 10px 10px 0',
-                }}
+                <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                <line x1="12" y1="18" x2="12.01" y2="18" />
+              </svg>
+              Mobile Money
+            </button>
+            <button
+              onClick={() => setTab('visa')}
+              style={{
+                padding: '12px 8px',
+                fontSize: 13,
+                fontWeight: 600,
+                border: 'none',
+                cursor: 'pointer',
+                background: tab === 'visa' ? '#0c5460' : 'var(--surface)',
+                color: tab === 'visa' ? 'white' : 'var(--text-2)',
+                transition: 'all 0.15s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <div style={{ fontSize: 18, marginBottom: 2 }}>💳</div>
-                Carte Visa
-              </button>
-            </div>
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                <line x1="1" y1="10" x2="23" y2="10" />
+              </svg>
+              Carte Visa
+            </button>
+          </div>
 
-            {tab === 'mobile' ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Opérateur */}
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--text-1)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    Opérateur
-                  </label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {OPERATORS.map((op) => (
-                      <div
-                        key={op.id}
-                        onClick={() => setOperator(op.id)}
-                        style={{
-                          flex: 1,
-                          border: `0.5px solid ${operator === op.id ? '#2ec80a' : 'var(--border)'}`,
-                          borderRadius: 10,
-                          padding: 12,
-                          textAlign: 'center',
-                          cursor: 'pointer',
-                          background: operator === op.id ? '#edfce8' : 'var(--surface)',
-                        }}
-                      >
-                        <div style={{ fontSize: 20, marginBottom: 4 }}>{op.emoji}</div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: operator === op.id ? '#0c5460' : 'var(--text-1)',
-                          }}
-                        >
-                          {op.label}
-                        </div>
-                        {operator === op.id && (
-                          <div style={{ fontSize: 10, color: '#16a34a', marginTop: 2 }}>
-                            ● Sélectionné
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+          {tab === 'mobile' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {/* Opérateurs — grille responsive 5 colonnes */}
+              <div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    marginBottom: 10,
+                  }}
+                >
+                  Opérateur Mobile Money
                 </div>
-
-                {/* Téléphone */}
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--text-1)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    Numéro de téléphone Mobile Money
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <div
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(90px,1fr))',
+                    gap: 8,
+                  }}
+                >
+                  {OPERATORS.map((op) => (
+                    <button
+                      key={op.id}
+                      onClick={() => setOperator(op.id)}
                       style={{
-                        position: 'absolute',
-                        left: 12,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        color: 'var(--text-2)',
+                        border: `2px solid ${operator === op.id ? '#2ec80a' : 'var(--border)'}`,
+                        borderRadius: 10,
+                        padding: '10px 4px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        background: operator === op.id ? '#edfce8' : 'var(--surface)',
+                        transition: 'all 0.15s',
+                        outline: 'none',
                       }}
                     >
-                      +225
-                    </div>
-                    <input
-                      className="form-input"
-                      style={{ paddingLeft: 52 }}
-                      placeholder="07 12 34 56 78"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                    />
-                  </div>
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 5 }}>
+                        <op.Icon size={34} />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: operator === op.id ? '#0c5460' : 'var(--text-1)',
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {op.label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 8.5,
+                          color: 'var(--text-2)',
+                          marginTop: 2,
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {op.sub}
+                      </div>
+                      {operator === op.id && (
+                        <div
+                          style={{ fontSize: 8, color: '#16a34a', marginTop: 4, fontWeight: 700 }}
+                        >
+                          ✓ Sélectionné
+                        </div>
+                      )}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                {/* Montant */}
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--text-1)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    Montant à recharger
-                  </label>
+              {/* Téléphone */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Numéro de téléphone
+                </label>
+                <div style={{ position: 'relative' }}>
                   <div
                     style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(4,1fr)',
-                      gap: 8,
-                      marginBottom: 14,
+                      position: 'absolute',
+                      left: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--text-2)',
                     }}
                   >
-                    {AMOUNTS.map((a) => (
-                      <button
-                        key={a}
-                        onClick={() => {
-                          setAmount(a);
-                          setCustomAmount('');
-                        }}
-                        style={{
-                          padding: 9,
-                          fontSize: 12.5,
-                          fontWeight: 500,
-                          border: `0.5px solid ${amount === a && !customAmount ? '#2ec80a' : 'rgba(0,0,0,0.12)'}`,
-                          borderRadius: 10,
-                          background: amount === a && !customAmount ? '#edfce8' : 'var(--surface)',
-                          color: amount === a && !customAmount ? '#0c5460' : 'var(--text-1)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {a.toLocaleString('fr-FR')} FCFA
-                      </button>
-                    ))}
+                    +225
                   </div>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      className="form-input"
-                      value={customAmount || amount.toString()}
-                      onChange={(e) => {
-                        setCustomAmount(e.target.value);
-                        setAmount(0);
-                      }}
-                      style={{ paddingRight: 52 }}
-                      placeholder="Autre montant"
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        right: 12,
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        fontSize: 12,
-                        color: 'var(--text-2)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      FCFA
-                    </div>
-                  </div>
-                  {finalAmount > 0 && (
-                    <div
-                      style={{
-                        marginTop: 6,
-                        padding: '10px 12px',
-                        background: '#edfce8',
-                        borderRadius: 6,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <span style={{ fontSize: 11, color: '#0c5460' }}>
-                        Crédits reçus après paiement
-                      </span>
-                      <strong style={{ color: '#0c5460', fontSize: 15 }}>
-                        {creditsAfter.toLocaleString('fr-FR')} FCFA
-                      </strong>
-                    </div>
-                  )}
+                  <input
+                    className="form-input"
+                    style={{ paddingLeft: 52, borderColor: phoneError ? '#ef4444' : undefined }}
+                    placeholder="07 12 34 56 78"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
                 </div>
+                {phoneError ? (
+                  <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>{phoneError}</div>
+                ) : rules ? (
+                  <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+                    {rules.hint}
+                  </div>
+                ) : null}
+              </div>
 
-                {/* OTP */}
+              {/* Montant */}
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Montant à recharger
+                </label>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(90px,1fr))',
+                    gap: 8,
+                    marginBottom: 12,
+                  }}
+                >
+                  {AMOUNTS.map((a) => (
+                    <button
+                      key={a}
+                      onClick={() => {
+                        setAmount(a);
+                        setCustomAmount('');
+                      }}
+                      style={{
+                        padding: '9px 4px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        border: `1.5px solid ${amount === a && !customAmount ? '#2ec80a' : 'var(--border)'}`,
+                        borderRadius: 8,
+                        background: amount === a && !customAmount ? '#edfce8' : 'var(--surface)',
+                        color: amount === a && !customAmount ? '#0c5460' : 'var(--text-1)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {a.toLocaleString('fr-FR')} FCFA
+                    </button>
+                  ))}
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="form-input"
+                    value={customAmount || amount.toString()}
+                    onChange={(e) => {
+                      setCustomAmount(e.target.value);
+                      setAmount(0);
+                    }}
+                    style={{ paddingRight: 52 }}
+                    placeholder="Autre montant"
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      fontSize: 12,
+                      color: 'var(--text-2)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    FCFA
+                  </div>
+                </div>
+                {amountError ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '8px 12px',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 8,
+                      fontSize: 11,
+                      color: '#ef4444',
+                    }}
+                  >
+                    {amountError}
+                  </div>
+                ) : finalAmount > 0 ? (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      padding: '10px 12px',
+                      background: '#edfce8',
+                      borderRadius: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: '#0c5460' }}>
+                      Crédits reçus après paiement
+                    </span>
+                    <strong style={{ color: '#0c5460', fontSize: 15 }}>
+                      {finalAmount.toLocaleString('fr-FR')} FCFA
+                    </strong>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* OTP — uniquement pour Orange Money */}
+              {operator === 'ORANGE' && (
                 <div
                   style={{
                     background: 'var(--muted)',
-                    borderRadius: 14,
+                    borderRadius: 12,
                     padding: 16,
-                    border: '0.5px solid rgba(0,0,0,0.12)',
+                    border: '1px solid var(--border)',
                   }}
                 >
                   <div
@@ -532,11 +869,17 @@ export default function Rechargement() {
                   >
                     Confirmation par code OTP
                   </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 12 }}>
-                    Un code à 6 chiffres sera envoyé au +225 {phone || '07 XX XX XX XX'} par votre
-                    opérateur.
+                  <div style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 6 }}>
+                    Composez{' '}
+                    <strong style={{ color: 'var(--text-1)', fontFamily: 'monospace' }}>
+                      #144*82#
+                    </strong>{' '}
+                    sur votre téléphone pour obtenir votre code à 4 chiffres.
                   </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>
+                    Le code sera envoyé au +225 {phone || '07 XX XX XX XX'}.
+                  </div>
+                  <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
                     {otp.map((digit, i) => (
                       <input
                         key={i}
@@ -545,221 +888,244 @@ export default function Rechargement() {
                         }}
                         className="form-input"
                         style={{
-                          width: 44,
+                          width: 48,
                           textAlign: 'center',
-                          fontSize: 18,
+                          fontSize: 20,
                           fontWeight: 700,
-                          padding: '8px 0',
+                          padding: '10px 0',
                         }}
                         maxLength={1}
+                        inputMode="numeric"
                         value={digit}
                         onChange={(e) => handleOtpInput(i, e.target.value)}
-                        placeholder="•"
+                        placeholder="·"
                       />
                     ))}
-                    <button
-                      className="btn-sm"
-                      onClick={handleSendOtp}
-                      style={{ marginLeft: 8, whiteSpace: 'nowrap' }}
-                    >
-                      {otpSent ? 'Renvoyer' : 'Envoyer OTP'}
-                    </button>
                   </div>
                 </div>
+              )}
 
-                <button
-                  className="btn-primary"
-                  onClick={handleConfirm}
-                  disabled={loading}
-                  style={{
-                    width: '100%',
-                    padding: 12,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    letterSpacing: '0.02em',
-                    opacity: loading ? 0.7 : 1,
-                  }}
-                >
-                  {loading
-                    ? 'Traitement…'
-                    : `Confirmer le paiement de ${finalAmount.toLocaleString('fr-FR')} FCFA →`}
-                </button>
-              </div>
-            ) : (
-              /* Visa form */
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--text-1)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    Numéro de carte
-                  </label>
-                  <input
-                    className="form-input"
-                    placeholder="1234 5678 9012 3456"
-                    value={cardNum}
-                    onChange={(e) => setCardNum(e.target.value)}
-                    maxLength={19}
-                  />
-                </div>
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: 'var(--text-1)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    Titulaire de la carte
-                  </label>
-                  <input
-                    className="form-input"
-                    placeholder="Nom complet"
-                    value={cardName}
-                    onChange={(e) => setCardName(e.target.value)}
-                  />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8 }}>
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: 'var(--text-1)',
-                        marginBottom: 8,
-                      }}
-                    >
-                      Date d'expiration
-                    </label>
-                    <input
-                      className="form-input"
-                      placeholder="MM/AA"
-                      value={cardExp}
-                      onChange={(e) => setCardExp(e.target.value)}
-                      maxLength={5}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: 'var(--text-1)',
-                        marginBottom: 8,
-                      }}
-                    >
-                      CVV
-                    </label>
-                    <input
-                      className="form-input"
-                      placeholder="123"
-                      value={cardCvv}
-                      onChange={(e) => setCardCvv(e.target.value)}
-                      maxLength={4}
-                      type="password"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: 'var(--text-1)',
-                        marginBottom: 8,
-                      }}
-                    >
-                      Montant
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        className="form-input"
-                        placeholder="10 000"
-                        value={customAmount}
-                        onChange={(e) => setCustomAmount(e.target.value)}
-                        style={{ paddingRight: 44 }}
-                      />
-                      <span
-                        style={{
-                          position: 'absolute',
-                          right: 10,
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          fontSize: 10,
-                          color: 'var(--text-2)',
-                          fontWeight: 600,
-                        }}
-                      >
-                        FCFA
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  className="btn-primary"
-                  onClick={handleConfirm}
-                  disabled={loading}
-                  style={{
-                    width: '100%',
-                    padding: 12,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    opacity: loading ? 0.7 : 1,
-                  }}
-                >
-                  {loading
-                    ? 'Traitement…'
-                    : `Payer ${(Number(customAmount) || finalAmount).toLocaleString('fr-FR')} FCFA →`}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Badges sécurité */}
-          <div
-            style={{ display: 'flex', gap: 12, justifyContent: 'space-between', padding: '0 4px' }}
-          >
-            {[
-              'Paiement sécurisé TLS 1.3',
-              'Créditage instantané',
-              'Reçu PDF disponible',
-              'Conformité PCI-DSS',
-            ].map((label) => (
+              <button
+                className="btn-primary"
+                onClick={handleConfirm}
+                disabled={loading || mobileFormInvalid}
+                style={{
+                  width: '100%',
+                  padding: 13,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  letterSpacing: '0.02em',
+                  opacity: mobileFormInvalid && !loading ? 0.5 : 1,
+                  cursor: mobileFormInvalid && !loading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loading
+                  ? 'Traitement…'
+                  : `Confirmer le paiement de ${finalAmount.toLocaleString('fr-FR')} FCFA →`}
+              </button>
+            </div>
+          ) : (
+            /* ── Visa ───────────────────────────────────────────────────────── */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div
-                key={label}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  fontSize: 10.5,
-                  color: 'var(--text-2)',
+                  gap: 12,
+                  padding: '12px 16px',
+                  background: 'var(--muted)',
+                  borderRadius: 10,
                 }}
               >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  stroke="#16a34a"
-                  strokeWidth="1.4"
-                >
-                  <path d="M7 1l5 2v5c0 3-2.5 5-5 6C4.5 13 2 11 2 8V3z" />
-                  <polyline points="4.5,7 6.5,9 9.5,5" />
-                </svg>
-                {label}
+                <VisaIcon size={52} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                    Visa / Mastercard
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                    Paiement sécurisé via Stripe
+                  </div>
+                </div>
+                <StripeIcon size={28} />
               </div>
-            ))}
-          </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Numéro de carte
+                </label>
+                <input
+                  className="form-input"
+                  placeholder="1234 5678 9012 3456"
+                  value={cardNum}
+                  onChange={(e) => setCardNum(e.target.value)}
+                  maxLength={19}
+                />
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Titulaire de la carte
+                </label>
+                <input
+                  className="form-input"
+                  placeholder="Nom complet"
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value)}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: 'var(--text-1)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Expiration
+                  </label>
+                  <input
+                    className="form-input"
+                    placeholder="MM/AA"
+                    value={cardExp}
+                    onChange={(e) => setCardExp(e.target.value)}
+                    maxLength={5}
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: 'var(--text-1)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    CVV
+                  </label>
+                  <input
+                    className="form-input"
+                    placeholder="123"
+                    value={cardCvv}
+                    onChange={(e) => setCardCvv(e.target.value)}
+                    maxLength={4}
+                    type="password"
+                  />
+                </div>
+              </div>
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: 'var(--text-1)',
+                    marginBottom: 8,
+                  }}
+                >
+                  Montant (FCFA)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="form-input"
+                    placeholder="10 000"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    style={{ paddingRight: 52 }}
+                  />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: 12,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      fontSize: 12,
+                      color: 'var(--text-2)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    FCFA
+                  </span>
+                </div>
+              </div>
+              <button
+                className="btn-primary"
+                onClick={handleConfirm}
+                disabled={loading}
+                style={{ width: '100%', padding: 13, fontSize: 14, fontWeight: 700 }}
+              >
+                {loading
+                  ? 'Traitement…'
+                  : `Payer ${(Number(customAmount) || finalAmount).toLocaleString('fr-FR')} FCFA →`}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Badges sécurité */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+            padding: '0 4px',
+          }}
+        >
+          {[
+            'Paiement sécurisé TLS 1.3',
+            'Créditage instantané',
+            'Reçu PDF disponible',
+            'Conformité PCI-DSS',
+          ].map((label) => (
+            <div
+              key={label}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 10.5,
+                color: 'var(--text-2)',
+              }}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="#16a34a"
+                strokeWidth="1.4"
+              >
+                <path d="M7 1l5 2v5c0 3-2.5 5-5 6C4.5 13 2 11 2 8V3z" />
+                <polyline points="4.5,7 6.5,9 9.5,5" />
+              </svg>
+              {label}
+            </div>
+          ))}
         </div>
       </div>
     </div>

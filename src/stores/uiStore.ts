@@ -6,9 +6,13 @@ interface UiState {
   activeDashboard: 1 | 2;
   toggleDashboard: () => void;
   setDashboard: (d: 1 | 2) => void;
-  /** Sidebar repliée */
+  /** Sidebar repliée (desktop) */
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (v: boolean) => void;
+  /** Sidebar ouverte sur mobile */
+  mobileSidebarOpen: boolean;
+  toggleMobileSidebar: () => void;
+  setMobileSidebarOpen: (v: boolean) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -19,6 +23,9 @@ export const useUiStore = create<UiState>()(
       setDashboard: (d) => set({ activeDashboard: d }),
       sidebarCollapsed: false,
       setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
+      mobileSidebarOpen: false,
+      toggleMobileSidebar: () => set((s) => ({ mobileSidebarOpen: !s.mobileSidebarOpen })),
+      setMobileSidebarOpen: (v) => set({ mobileSidebarOpen: v }),
     }),
     { name: 'novasms-ui' },
   ),

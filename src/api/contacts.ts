@@ -14,13 +14,15 @@ export const contactsApi = {
    * Récupérer la liste des contacts avec pagination cursor-based (RG-53)
    * GET /api/contacts?cursor=xxx&limit=20&location=Abidjan&tag=VIP
    */
-  list: async (params?: {
-    cursor?: string;
-    limit?: number;
-    search?: string;
-  } & ContactFilter) => {
+  list: async (
+    params?: {
+      cursor?: string;
+      limit?: number;
+      search?: string;
+    } & ContactFilter,
+  ) => {
     const queryParams = new URLSearchParams();
-    
+
     if (params?.cursor) queryParams.append('cursor', params.cursor);
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     if (params?.search) queryParams.append('search', params.search);
@@ -34,7 +36,7 @@ export const contactsApi = {
       nextCursor: string | null;
       total: number;
     }>(`/contacts?${queryParams}`);
-    
+
     return response.data;
   },
 
@@ -48,17 +50,17 @@ export const contactsApi = {
   },
 
   getHistory: async (id: string) => {
-    const response = await api.get<{ data: Array<{ id: string; type: string; message: string; createdAt: string }> }>(
-      `/contacts/${id}/history`,
-    );
+    const response = await api.get<{
+      data: Array<{ id: string; type: string; message: string; createdAt: string }>;
+    }>(`/contacts/${id}/history`);
     return response.data.data;
   },
 
-  addNote: async (id: string, note: string) => {
-    const response = await api.post<{ success: boolean; note: { id: string; content: string; createdAt: string } }>(
-      `/contacts/${id}/notes`,
-      { note },
-    );
+  addNote: async (id: string, content: string) => {
+    const response = await api.post<{
+      success: boolean;
+      notes: Array<{ id: string; content: string; createdAt: string }>;
+    }>(`/contacts/${id}/notes`, { content });
     return response.data;
   },
 
@@ -121,9 +123,12 @@ export const contactsApi = {
 
   exportById: async (id: string, format: 'json' | 'csv' = 'json') => {
     try {
-      const response = await api.get<{ success: boolean; format: string; data: string; fileName: string }>(
-        `/contacts/${id}/export?format=${format}`,
-      );
+      const response = await api.get<{
+        success: boolean;
+        format: string;
+        data: string;
+        fileName: string;
+      }>(`/contacts/${id}/export?format=${format}`);
       // Convertir le contenu en blob avec le bon type MIME
       const mimeType = format === 'csv' ? 'text/csv;charset=utf-8' : 'application/json';
       const blob = new Blob([response.data.data], { type: mimeType });
@@ -136,8 +141,8 @@ export const contactsApi = {
 
   previewSegment: async (logic: SegmentLogic, criteria: SegmentCriterion[]) => {
     // Filter out empty criteria before sending to backend
-    const validCriteria = criteria.filter(c => c.value && c.value.toString().trim().length > 0);
-    
+    const validCriteria = criteria.filter((c) => c.value && c.value.toString().trim().length > 0);
+
     const response = await api.post<{ count: number }>('/contacts/segments/preview', {
       logic,
       criteria: validCriteria,
@@ -147,13 +152,16 @@ export const contactsApi = {
 
   createSegment: async (name: string, logic: SegmentLogic, criteria: SegmentCriterion[]) => {
     // Filter out empty criteria before sending to backend
-    const validCriteria = criteria.filter(c => c.value && c.value.toString().trim().length > 0);
-    
-    const response = await api.post<{ success: boolean; segment: DynamicSegment }>('/contacts/segments', {
-      name,
-      logic,
-      criteria: validCriteria,
-    });
+    const validCriteria = criteria.filter((c) => c.value && c.value.toString().trim().length > 0);
+
+    const response = await api.post<{ success: boolean; segment: DynamicSegment }>(
+      '/contacts/segments',
+      {
+        name,
+        logic,
+        criteria: validCriteria,
+      },
+    );
     return response.data;
   },
 
@@ -180,12 +188,15 @@ export const contactsApi = {
   },
 
   createSegmentFromContacts: async (name: string, contactIds: string[]) => {
-    const response = await api.post<{ success: boolean; segment: DynamicSegment }>('/contacts/segments', {
-      name,
-      logic: 'AND',
-      criteria: [],
-      contactIds,
-    });
+    const response = await api.post<{ success: boolean; segment: DynamicSegment }>(
+      '/contacts/segments',
+      {
+        name,
+        logic: 'AND',
+        criteria: [],
+        contactIds,
+      },
+    );
     return response.data;
   },
 

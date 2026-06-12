@@ -10,7 +10,9 @@ function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return JSON.parse(raw) as Record<string, unknown>;
-  } catch {}
+  } catch {
+    // localStorage corrompu ou inaccessible : on repart de zéro
+  }
   return {};
 }
 
@@ -68,23 +70,40 @@ export default function Settings() {
   const [alertThreshold, setAlertThreshold] = useState<string>(
     (saved.alertThreshold as string) || '',
   );
-  const [apiVisible, setApiVisible] = useState(false);
+  const [creditLimitInput, setCreditLimitInput] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [balance, setBalance] = useState<{
     creditBalance: number;
     alertThreshold: number | null;
+    creditLimit: number | null;
   } | null>(null);
 
   useEffect(() => {
-    api
-      .get<{ success: boolean; balance: number; alertThreshold: number | null }>('/account/balance')
-      .then((res) => {
-        setBalance({ creditBalance: res.data.balance, alertThreshold: res.data.alertThreshold });
-        if (res.data.alertThreshold && !alertThreshold) {
-          setAlertThreshold(String(res.data.alertThreshold));
-        }
-      })
-      .catch(() => {});
+    const fetchBalance = () => {
+      api
+        .get<{
+          success: boolean;
+          balance: number;
+          alertThreshold: number | null;
+          creditLimit: number | null;
+        }>('/account/balance')
+        .then((res) => {
+          setBalance({
+            creditBalance: res.data.balance,
+            alertThreshold: res.data.alertThreshold,
+            creditLimit: res.data.creditLimit ?? null,
+          });
+          if (res.data.alertThreshold && !alertThreshold) {
+            setAlertThreshold(String(res.data.alertThreshold));
+          }
+          if (res.data.creditLimit && !creditLimitInput) {
+            setCreditLimitInput(String(res.data.creditLimit));
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchBalance();
 
     // Charger les préférences de notification depuis le backend
     api
@@ -99,6 +118,9 @@ export default function Settings() {
         }
       })
       .catch(() => {});
+
+    window.addEventListener('novasms:balance-refresh', fetchBalance);
+    return () => window.removeEventListener('novasms:balance-refresh', fetchBalance);
   }, []);
 
   const handleLanguageChange = (lang: string) => {
@@ -108,6 +130,21 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
+    const parsedCreditLimit = creditLimitInput ? Number(creditLimitInput) : null;
+
+    if (parsedCreditLimit !== null && balance) {
+      if (parsedCreditLimit > balance.creditBalance) {
+        toast.error(
+          `La limite d'utilisation (${parsedCreditLimit.toLocaleString('fr-FR')} FCFA) ne peut pas dépasser le solde actuel (${balance.creditBalance.toLocaleString('fr-FR')} FCFA)`,
+        );
+        return;
+      }
+      if (parsedCreditLimit < 0) {
+        toast.error("La limite d'utilisation doit être positive");
+        return;
+      }
+    }
+
     setSaving(true);
     const prefs = {
       language,
@@ -120,9 +157,13 @@ export default function Settings() {
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(prefs));
     try {
+      const settingsPayload: Record<string, number> = {};
+      if (alertThreshold) settingsPayload['alertThreshold'] = Number(alertThreshold);
+      if (parsedCreditLimit !== null) settingsPayload['creditLimit'] = parsedCreditLimit;
+
       await Promise.all([
-        alertThreshold
-          ? api.patch('/account/settings', { alertThreshold: Number(alertThreshold) })
+        Object.keys(settingsPayload).length > 0
+          ? api.patch('/account/settings', settingsPayload)
           : Promise.resolve(),
         api.patch('/account/notification-prefs', {
           emailOnCampaignDone: notifCampaigns,
@@ -130,8 +171,13 @@ export default function Settings() {
         }),
       ]);
       toast.success('Préférences enregistrées');
-    } catch {
-      toast.success('Préférences enregistrées localement');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      if (msg) {
+        toast.error(msg);
+      } else {
+        toast.success('Préférences enregistrées localement');
+      }
     } finally {
       setSaving(false);
     }
@@ -178,38 +224,89 @@ export default function Settings() {
               </div>
             </div>
           </div>
-          {balance && (
-            <div
-              className="credits-pill"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '5px 12px',
-                background: 'var(--muted)',
-                borderRadius: 20,
-              }}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 12 12"
-                fill="none"
-                stroke="var(--brand-primary)"
-                strokeWidth="1.4"
-              >
-                <circle cx="6" cy="6" r="5" />
-                <path d="M4.5 6l1 1 2-2" />
-              </svg>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)' }}>
-                {Number(balance.creditBalance).toLocaleString('fr-FR')} FCFA
-              </span>
-            </div>
-          )}
+          {balance &&
+            (() => {
+              const bMax =
+                balance.creditLimit && balance.creditLimit > 0
+                  ? balance.creditLimit
+                  : balance.alertThreshold && balance.alertThreshold > 0
+                    ? balance.alertThreshold * 3
+                    : null;
+              const bPct =
+                bMax != null
+                  ? Math.min(100, Math.round((Number(balance.creditBalance) / bMax) * 100))
+                  : 0;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div
+                    className="credits-pill"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '5px 12px',
+                      background: 'var(--muted)',
+                      borderRadius: 20,
+                    }}
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 12 12"
+                      fill="none"
+                      stroke="var(--brand-primary)"
+                      strokeWidth="1.4"
+                    >
+                      <circle cx="6" cy="6" r="5" />
+                      <path d="M4.5 6l1 1 2-2" />
+                    </svg>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)' }}>
+                      {Number(balance.creditBalance).toLocaleString('fr-FR')} FCFA
+                    </span>
+                  </div>
+                  {bMax != null && (
+                    <div style={{ minWidth: 140 }}>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: 5,
+                          borderRadius: 999,
+                          background: 'var(--border)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${bPct}%`,
+                            height: '100%',
+                            borderRadius: 999,
+                            background:
+                              bPct < 20
+                                ? 'var(--color-error, #ef4444)'
+                                : bPct < 50
+                                  ? '#f59e0b'
+                                  : 'var(--brand-gradient)',
+                            transition: 'width 0.4s ease',
+                          }}
+                        />
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {bPct}% · Limite {bMax.toLocaleString('fr-FR')} FCFA
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))',
+          gap: 12,
+        }}
+      >
         {/* Préférences générales */}
         <div className="card">
           <div className="card-title mb-12">Préférences générales</div>
@@ -257,6 +354,24 @@ export default function Settings() {
               />
               <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
                 Notification email quand le solde passe sous ce seuil
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
+                Limite d'utilisation (FCFA)
+              </div>
+              <input
+                type="number"
+                min={0}
+                max={balance?.creditBalance ?? undefined}
+                className="input"
+                value={creditLimitInput}
+                onChange={(e) => setCreditLimitInput(e.target.value)}
+                placeholder="ex: 50 000"
+              />
+              <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+                Jauge de crédit basée sur cette limite · doit être ≤ solde actuel
+                {balance ? ` (${balance.creditBalance.toLocaleString('fr-FR')} FCFA)` : ''}
               </div>
             </div>
           </div>

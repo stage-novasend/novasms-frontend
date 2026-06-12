@@ -98,7 +98,18 @@ const CampaignListDashboard: FC = () => {
   };
 
   const getChannelIcon = (channel: string) => {
-    return channel === 'SMS' ? '💬' : '📧';
+    if (channel === 'SMS') {
+      return (
+        <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#0c5460' }}>
+          sms
+        </span>
+      );
+    }
+    return (
+      <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#7c3aed' }}>
+        mail
+      </span>
+    );
   };
 
   const formatDate = (date: Date | string) => {
@@ -117,110 +128,115 @@ const CampaignListDashboard: FC = () => {
   const renderCampaignCard = (campaign: Campaign, tone: 'automation' | 'classic') => (
     <div
       key={campaign.id}
-      className={`relative rounded-2xl p-6 flex items-center justify-between transition-all border ${tone === 'automation' ? 'bg-primary/5 border-primary/15 hover:bg-primary/10' : 'bg-surface-container border-outline-variant/10 hover:bg-surface-container-high'}`}
+      className="flex items-center gap-4 rounded-xl border border-outline-variant/20 bg-white px-5 py-4 transition-all hover:shadow-md hover:-translate-y-px"
+      style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}
     >
-      <div className="absolute left-0 top-0 h-full w-1.5 rounded-l-2xl bg-current opacity-70" />
+      {/* Canal icon */}
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+        style={{
+          background: campaign.channel === 'SMS' ? 'rgba(12,84,96,0.08)' : 'rgba(124,58,237,0.08)',
+        }}
+      >
+        {getChannelIcon(campaign.channel)}
+      </div>
 
-      {/* Left: Campaign Info */}
-      <div className="flex-1 flex items-start gap-6 pl-2">
-        {/* Channel Icon & Name */}
-        <div className="flex items-start gap-4 flex-1">
-          <div className="text-4xl">{getChannelIcon(campaign.channel)}</div>
-          <div className="flex-1">
-            <div className="mb-2 flex items-center gap-2">
-              <h3 className="font-headline font-bold text-lg text-on-surface">{campaign.name}</h3>
-              {tone === 'automation' && (
-                <span className="rounded-full bg-tertiary/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-tertiary">
-                  Automatisation
-                </span>
-              )}
-            </div>
-            {campaign.description && (
-              <p className="text-on-surface-variant text-sm mb-3">{campaign.description}</p>
-            )}
-            <div className="flex items-center gap-3 flex-wrap">
-              <span
-                className={`text-xs font-bold px-3 py-1 rounded-full ${getStatusBadgeColor(
-                  campaign.status,
-                )}`}
-              >
-                {campaign.status === 'draft' && 'Brouillon'}
-                {campaign.status === 'scheduled' && 'Planifiée'}
-                {campaign.status === 'sent' && 'Envoyée'}
-                {campaign.status === 'paused' && 'Pause'}
-                {campaign.status === 'failed' && 'Échouée'}
-                {campaign.status === 'cancelled' && 'Annulée'}
-                {campaign.status === 'automation' && 'Automatisation'}
-              </span>
-
-              <div className="text-xs text-on-surface-variant flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm">group</span>
-                {campaign.estimatedRecipients.toLocaleString('fr-FR')} contacts
-              </div>
-
-              <div className="text-xs text-on-surface-variant flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm">schedule</span>
-                {formatDate(campaign.updatedAt)}
-              </div>
-            </div>
-          </div>
+      {/* Info principale */}
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="truncate font-semibold text-on-surface" style={{ fontSize: 14 }}>
+            {campaign.name}
+          </h3>
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${getStatusBadgeColor(campaign.status)}`}
+          >
+            {campaign.status === 'draft' && 'Brouillon'}
+            {campaign.status === 'scheduled' && 'Planifiée'}
+            {campaign.status === 'sent' && 'Envoyée'}
+            {campaign.status === 'paused' && 'En pause'}
+            {campaign.status === 'failed' && 'Échouée'}
+            {campaign.status === 'cancelled' && 'Annulée'}
+            {campaign.status === 'automation' && 'Automatisation'}
+          </span>
+          {tone === 'automation' && campaign.status !== 'automation' && (
+            <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold text-primary">
+              Auto
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-on-surface-variant">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+              group
+            </span>
+            {campaign.estimatedRecipients.toLocaleString('fr-FR')} contacts
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+              schedule
+            </span>
+            {formatDate(campaign.updatedAt)}
+          </span>
+          <span
+            className="font-semibold"
+            style={{ color: campaign.estimatedCost > 0 ? '#0c5460' : 'var(--text-3)' }}
+          >
+            {formatCost(campaign.estimatedCost)}
+          </span>
         </div>
       </div>
 
-      {/* Right: Cost & Actions */}
-      <div className="flex items-center gap-6">
-        <div className="text-right">
-          <p className="text-on-surface-variant text-xs font-bold uppercase">Coût</p>
-          <p className="font-headline font-black text-2xl text-primary">
-            {formatCost(campaign.estimatedCost)}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Link
-            to={`/campaigns/${campaign.id}`}
-            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-            title="Voir"
-          >
-            <span className="material-symbols-outlined">visibility</span>
-          </Link>
-
-          <Link
-            to={`/campaigns/${campaign.id}/report`}
-            className="p-2 hover:bg-surface-container-high rounded-lg transition-all text-secondary"
-            title="Rapport"
-          >
-            <span className="material-symbols-outlined">bar_chart</span>
-          </Link>
-
-          <Link
-            to={`/campaigns/${campaign.id}/edit`}
-            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-            title="Modifier"
-          >
-            <span className="material-symbols-outlined">edit</span>
-          </Link>
-
-          <button
-            onClick={async () => {
-              const duplicated = await duplicateCampaign(campaign);
-              toast.success('Campagne dupliquée');
-              navigate(`/campaigns/${duplicated.id}/edit`);
-            }}
-            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-            title="Dupliquer"
-          >
-            <span className="material-symbols-outlined">content_copy</span>
-          </button>
-
-          <button
-            onClick={() => setDeleteTarget(campaign)}
-            className="p-2 hover:bg-surface-container-high rounded-lg transition-all"
-            title="Supprimer"
-          >
-            <span className="material-symbols-outlined text-error">delete</span>
-          </button>
-        </div>
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-1">
+        <Link
+          to={`/campaigns/${campaign.id}`}
+          className="rounded-lg p-2 text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface"
+          title="Voir"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            visibility
+          </span>
+        </Link>
+        <Link
+          to={`/campaigns/${campaign.id}/report`}
+          className="rounded-lg p-2 text-on-surface-variant transition hover:bg-surface-container hover:text-primary"
+          title="Rapport"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            bar_chart
+          </span>
+        </Link>
+        <Link
+          to={`/campaigns/${campaign.id}/edit`}
+          className="rounded-lg p-2 text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface"
+          title="Modifier"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            edit
+          </span>
+        </Link>
+        <button
+          onClick={async () => {
+            const duplicated = await duplicateCampaign(campaign);
+            toast.success('Campagne dupliquée');
+            navigate(`/campaigns/${duplicated.id}/edit`);
+          }}
+          className="rounded-lg p-2 text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface"
+          title="Dupliquer"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            content_copy
+          </span>
+        </button>
+        <button
+          onClick={() => setDeleteTarget(campaign)}
+          className="rounded-lg p-2 text-on-surface-variant transition hover:bg-surface-container"
+          title="Supprimer"
+        >
+          <span className="material-symbols-outlined text-error" style={{ fontSize: 18 }}>
+            delete
+          </span>
+        </button>
       </div>
     </div>
   );

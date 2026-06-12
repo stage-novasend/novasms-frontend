@@ -111,4 +111,29 @@ export const automationsApi = {
     const response = await api.delete<{ success: boolean }>(`/automations/${id}`);
     return response.data;
   },
+
+  trigger: async (
+    id: string,
+    payload: { contactId: string; delaySeconds?: number },
+  ): Promise<{ id: string; status: string; contactId: string; automationId: string }> => {
+    const response = await api.post<{
+      id: string;
+      status: string;
+      contactId: string;
+      automationId: string;
+    }>(`/automations/${id}/trigger`, payload);
+    return response.data;
+  },
+
+  listAutomationCampaigns: async (
+    channel?: string,
+  ): Promise<
+    { id: string; name: string; channelType: string; status: string; updatedAt: string }[]
+  > => {
+    const params = channel ? `?channel=${encodeURIComponent(channel)}` : '';
+    const response = await api.get<
+      { id: string; name: string; channelType: string; status: string; updatedAt: string }[]
+    >(`/campaigns/automation-ready${params}`);
+    return response.data;
+  },
 };

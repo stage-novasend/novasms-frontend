@@ -4,7 +4,6 @@ import { useCampaignStore } from '@/store/campaign.store';
 import { contactsApi } from '@/api/contacts';
 import { getSegmentContactCount } from '@/services/campaignService';
 import type { DynamicSegment } from '@/features/contacts/types/contact';
-import SegmentBuilder from '@/components/segments/SegmentBuilder';
 
 interface CampaignAudienceStepProps {
   onNext: () => void;
@@ -23,26 +22,12 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
   const [loading, setLoading] = useState(true);
   const [contactCounts, setContactCounts] = useState<Record<string, number>>({});
   const [loadingCounts, setLoadingCounts] = useState<Set<string>>(new Set());
-  const [showBuilder, setShowBuilder] = useState(false);
 
   const loadSegments = async () => {
     try {
-      console.log('📡 Fetching segments from API...');
       const data = await contactsApi.listSegments();
-      console.log('✅ Raw API response:', data);
-      console.log('✅ Response type:', typeof data);
-      console.log('✅ Is array?:', Array.isArray(data));
-
-      if (!Array.isArray(data)) {
-        console.warn('⚠️ Response is not an array, got:', data);
-        setSegments([]);
-      } else {
-        console.log('✅ Segments loaded successfully:', data.length, 'items');
-        setSegments(data as DynamicSegment[]);
-      }
-    } catch (error) {
-      console.error('❌ Error loading segments:', error);
-      console.error('❌ Error type:', error instanceof Error ? error.message : String(error));
+      setSegments(Array.isArray(data) ? (data as DynamicSegment[]) : []);
+    } catch {
       setSegments([]);
     } finally {
       setLoading(false);
@@ -73,8 +58,7 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
         try {
           const count = await getSegmentContactCount(segmentId);
           counts[segmentId] = count;
-        } catch (error) {
-          console.error(`Error loading contact count for ${segmentId}:`, error);
+        } catch {
           counts[segmentId] = 0;
         }
       }
@@ -90,6 +74,14 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
   const selectedContactCount = selectedSegment
     ? (contactCounts[selectedSegment.id] ?? selectedSegment.contactCount ?? 0)
     : 0;
+
+  useEffect(() => {
+    if (selectedSegment) {
+      const count = contactCounts[selectedSegment.id] ?? selectedSegment.contactCount ?? 0;
+      const cost = count * 0.08; // SMS cost per recipient
+      updateEstimates(count, cost);
+    }
+  }, [selectedSegment, contactCounts, updateEstimates]);
 
   if (draft.mode === 'automation') {
     return (
@@ -167,14 +159,6 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
     );
   }
 
-  useEffect(() => {
-    if (selectedSegment) {
-      const count = contactCounts[selectedSegment.id] ?? selectedSegment.contactCount ?? 0;
-      const cost = count * 0.08; // SMS cost per recipient
-      updateEstimates(count, cost);
-    }
-  }, [selectedSegment, contactCounts, updateEstimates]);
-
   const handleSelectSegment = (segmentId: string, segmentName: string | null) => {
     setDraftSegment(segmentId, segmentName || 'Sans nom');
   };
@@ -247,38 +231,6 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
         </p>
       </div>
 
-      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 space-y-4">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-[11px] font-bold text-primary uppercase tracking-widest">
-              Créer un segment
-            </p>
-            <h3 className="font-headline font-bold text-xl text-on-surface mt-1">
-              Segment Builder branché au wizard
-            </h3>
-            <p className="text-sm text-on-surface-variant mt-2">
-              Créez un segment sans quitter le flow, puis rechargez la liste automatiquement.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowBuilder((current) => !current)}
-            className="px-4 py-2 rounded-lg bg-primary text-on-primary font-bold text-sm hover:brightness-110 transition-colors"
-          >
-            {showBuilder ? 'Masquer' : 'Créer un segment'}
-          </button>
-        </div>
-
-        {showBuilder && (
-          <SegmentBuilder
-            onCreated={async () => {
-              setShowBuilder(false);
-              setLoading(true);
-              await loadSegments();
-            }}
-          />
-        )}
-      </div>
-
       {/* Segments Grid */}
       {segments.length === 0 ? (
         <div className="space-y-6">
@@ -300,7 +252,6 @@ export const CampaignAudienceStep: FC<CampaignAudienceStepProps> = ({ onNext, on
               </a>
               <button
                 onClick={() => {
-                  console.log('🔄 Reloading segments...');
                   window.location.reload();
                 }}
                 className="px-6 py-3 bg-surface-container-high text-on-surface font-semibold rounded-xl hover:bg-surface-container-highest transition-colors"

@@ -244,13 +244,11 @@ export const CampaignWizard: FC = () => {
   }, [draftSaved]);
 
   const handleSaveDraft = async () => {
-    console.log('💾 Saving draft:', draft);
     saveDraft();
 
     try {
       const persisted = await persistDraftToBackend();
       if (persisted) {
-        console.log('✅ Draft saved successfully');
         setDraftSaved(true);
       }
     } catch (error) {
@@ -259,20 +257,16 @@ export const CampaignWizard: FC = () => {
   };
 
   const handleNext = async () => {
-    console.log('⏭️  Moving to next step from step', draft.step);
     saveDraft();
     if (draft.step < 4) {
       const nextStep = (draft.step + 1) as 1 | 2 | 3 | 4;
-      console.log('📍 Next step:', nextStep);
       setDraftStep(nextStep);
     }
   };
 
   const handlePrev = () => {
-    console.log('⏮️  Moving to previous step from step', draft.step);
     if (draft.step > 1) {
       const prevStep = (draft.step - 1) as 1 | 2 | 3 | 4;
-      console.log('📍 Previous step:', prevStep);
       setDraftStep(prevStep);
     }
   };
@@ -282,10 +276,8 @@ export const CampaignWizard: FC = () => {
   };
 
   const handleDiscard = () => {
-    console.log('🗑️  Discarding draft');
     clearDraft();
     setConfirmDiscard(false);
-    console.log('✅ Draft cleared, redirecting to /campaigns');
     window.location.href = '/campaigns';
   };
 

@@ -32,7 +32,7 @@ function normalizeCriteria(value: unknown): SegmentCriteria {
   };
 }
 
-function normalizeSegment(segment: any): Segment {
+function normalizeSegment(segment: Partial<Segment> | null | undefined): Segment {
   return {
     id: String(segment?.id ?? ''),
     name:

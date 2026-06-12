@@ -293,12 +293,10 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     handleABTestChange();
 
     try {
-      console.log('💾 Saving draft from schedule step...');
       const latestDraft = useCampaignStore.getState().draft;
 
       let campaignId = selectedCampaignId;
       if (!campaignId) {
-        console.log('📝 Creating minimal campaign draft...');
         const createRes = await api.post<{ id: string }>('/campaigns', {
           channelType: latestDraft.channel,
           name: latestDraft.name,
@@ -307,7 +305,6 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         });
         campaignId = createRes.data.id;
         useCampaignStore.setState({ selectedCampaignId: campaignId });
-        console.log('✅ Campaign draft created with ID:', campaignId);
       }
 
       const subject =
@@ -352,15 +349,17 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
       setIsSaving(false);
 
       if (result.success) {
-        await runScheduleValidation(campaignId, { silent: true });
-        console.log('✅ Draft saved successfully');
-        toast.success('✓ Brouillon sauvegardé');
+        toast.success(isAutomationMode ? '✓ Automatisation enregistrée' : '✓ Brouillon sauvegardé');
+        if (isAutomationMode) {
+          clearDraft();
+          navigate('/campaigns');
+        } else {
+          await runScheduleValidation(campaignId, { silent: true });
+        }
       } else {
-        console.error('❌ Draft save error:', result.error);
         toast.error(result.error || 'Erreur lors de la sauvegarde');
       }
-    } catch (err) {
-      console.error('❌ Error in handleSaveDraft:', err);
+    } catch {
       toast.error('Erreur lors de la sauvegarde du brouillon');
       setIsSaving(false);
     }
@@ -418,12 +417,9 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
     }
 
     try {
-      console.log('🚀 Preparing to send campaign...');
-
       // If no campaignId, first create the campaign
       let campaignId = selectedCampaignId;
       if (!campaignId) {
-        console.log('📝 Creating campaign first to get ID...');
         const createRes = await api.post<{ id: string }>('/campaigns', {
           channelType: latestDraft.channel,
           name: latestDraft.name,
@@ -437,7 +433,6 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
         });
         campaignId = createRes.data.id;
         useCampaignStore.setState({ selectedCampaignId: campaignId });
-        console.log('✅ Campaign created with ID:', campaignId);
       }
 
       const draftData: Record<string, unknown> = {
@@ -504,7 +499,6 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
           scheduleType === 'scheduled'
             ? '✓ Campagne programmée avec succès'
             : '✓ Campagne envoyée avec succès';
-        console.log('✅ Send campaign successful');
         toast.success(message);
 
         // Refresh list cache so /campaigns reflects latest status without manual reload.
@@ -532,14 +526,12 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
 
     try {
       setIsSaving(true);
-      console.log('⏹️  Cancelling campaign...');
 
       if (selectedCampaignId) {
         const result = await cancelCampaign(selectedCampaignId);
         setIsSaving(false);
 
         if (result.success) {
-          console.log('✅ Campaign cancelled');
           toast.success('✓ Campagne annulée');
           clearDraft();
           navigate('/campaigns');
@@ -548,7 +540,6 @@ export const CampaignScheduleStep: FC<CampaignScheduleStepProps> = ({ onPrev }) 
           toast.error(result.error || "Erreur lors de l'annulation");
         }
       } else {
-        console.log('📌 No campaign ID, just clearing draft');
         clearDraft();
         setIsSaving(false);
         toast.success('✓ Brouillon supprimé');

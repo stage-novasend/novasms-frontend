@@ -60,11 +60,14 @@ export const EmailEditor: FC = () => {
   );
 
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [focusedField, setFocusedField] = useState<'subject' | 'preheader' | 'block' | null>(null);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [showHtmlImport, setShowHtmlImport] = useState(false);
   const [htmlImportValue, setHtmlImportValue] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
+  const preheaderInputRef = useRef<HTMLInputElement>(null);
   const pendingImageUploadRef = useRef<((uploadedImage: UploadedImage) => void) | null>(null);
   const lastHydratedContentRef = useRef<string>('');
 
@@ -80,14 +83,6 @@ export const EmailEditor: FC = () => {
     activeVariant === 'A' ? preheaderA : activeVariant === 'B' ? preheaderB : preheader;
   const setCurrentPreheader =
     activeVariant === 'A' ? setPreheaderA : activeVariant === 'B' ? setPreheaderB : setPreheader;
-
-  const fileToDataUrl = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(new Error('Impossible de lire le fichier image'));
-      reader.readAsDataURL(file);
-    });
 
   // Get campaign ID from store (used for image uploads)
   const campaignId = selectedCampaignId;
@@ -248,10 +243,50 @@ export const EmailEditor: FC = () => {
     return typeof value === 'string' ? value : '';
   };
 
+  const insertAtCursor = (
+    ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement>,
+    current: string,
+    setter: (v: string) => void,
+    variable: string,
+  ) => {
+    const el = ref.current;
+    if (el) {
+      const start = el.selectionStart ?? current.length;
+      const end = el.selectionEnd ?? current.length;
+      const next = current.slice(0, start) + variable + current.slice(end);
+      setter(next);
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(start + variable.length, start + variable.length);
+      });
+    } else {
+      setter(current + variable);
+    }
+  };
+
   const handleInsertVariable = (variable: string) => {
+    if (focusedField === 'subject') {
+      insertAtCursor(
+        subjectInputRef as React.RefObject<HTMLInputElement>,
+        currentSubject,
+        setCurrentSubject,
+        variable,
+      );
+      return;
+    }
+    if (focusedField === 'preheader') {
+      insertAtCursor(
+        preheaderInputRef as React.RefObject<HTMLInputElement>,
+        currentPreheader,
+        setCurrentPreheader,
+        variable,
+      );
+      return;
+    }
     const block = currentBlocks.find((b) => b.id === selectedBlockId);
     if (block && block.type === 'text') {
       handleUpdateBlock(block.id, {
+        ...block.content,
         text: `${getContentText(block.content)}${variable}`,
       });
     }
@@ -277,7 +312,6 @@ export const EmailEditor: FC = () => {
   const uploadImageFile = async (
     file: File | null,
     onUploaded?: (uploadedImage: UploadedImage) => void,
-    inlineSrc?: string,
   ) => {
     if (!file) return;
 
@@ -294,7 +328,7 @@ export const EmailEditor: FC = () => {
       const realCampaignId = await ensureCampaignIdForUpload();
       const uploadedImage = await imageUploadService.uploadImage(file, realCampaignId);
       setUploadedImages([...uploadedImages, uploadedImage]);
-      onUploaded?.(inlineSrc ? { ...uploadedImage, url: inlineSrc } : uploadedImage);
+      onUploaded?.(uploadedImage);
     } catch (error) {
       alert(
         "Erreur lors de l'upload: " + (error instanceof Error ? error.message : 'Erreur inconnue'),
@@ -307,26 +341,21 @@ export const EmailEditor: FC = () => {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     const pendingUpload = pendingImageUploadRef.current;
-    const inlineSrc = file ? await fileToDataUrl(file) : '';
 
-    await uploadImageFile(
-      file,
-      (uploadedImage) => {
-        if (pendingUpload) {
-          pendingUpload(uploadedImage);
-          return;
-        }
+    await uploadImageFile(file, (uploadedImage) => {
+      if (pendingUpload) {
+        pendingUpload(uploadedImage);
+        return;
+      }
 
-        const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
-        if (selectedBlock && selectedBlock.type === 'image') {
-          handleUpdateBlock(selectedBlock.id, {
-            src: uploadedImage.url,
-            alt: uploadedImage.name,
-          });
-        }
-      },
-      inlineSrc,
-    );
+      const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
+      if (selectedBlock && selectedBlock.type === 'image') {
+        handleUpdateBlock(selectedBlock.id, {
+          src: uploadedImage.url,
+          alt: uploadedImage.name,
+        });
+      }
+    });
 
     pendingImageUploadRef.current = null;
 
@@ -634,9 +663,12 @@ export const EmailEditor: FC = () => {
               Ligne d&apos;objet
             </label>
             <input
+              ref={subjectInputRef}
               type="text"
               value={currentSubject}
               onChange={(e) => setCurrentSubject(e.target.value)}
+              onFocus={() => setFocusedField('subject')}
+              onBlur={() => setFocusedField(null)}
               placeholder="Sujet accrocheur..."
               maxLength={120}
               className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3 font-body text-on-surface transition-all"
@@ -647,9 +679,12 @@ export const EmailEditor: FC = () => {
               Prévisualisation (optionnel)
             </label>
             <input
+              ref={preheaderInputRef}
               type="text"
               value={currentPreheader}
               onChange={(e) => setCurrentPreheader(e.target.value)}
+              onFocus={() => setFocusedField('preheader')}
+              onBlur={() => setFocusedField(null)}
               placeholder="Texte visible avant d'ouvrir..."
               maxLength={100}
               className="w-full bg-surface-container-lowest border-none ring-1 ring-outline-variant focus:ring-2 focus:ring-primary rounded-xl px-4 py-3 font-body text-on-surface transition-all"
@@ -667,7 +702,10 @@ export const EmailEditor: FC = () => {
             currentBlocks.map((block) => (
               <div
                 key={block.id}
-                onClick={() => setSelectedBlockId(block.id)}
+                onClick={() => {
+                  setSelectedBlockId(block.id);
+                  setFocusedField('block');
+                }}
                 className={`p-4 rounded-lg border-2 transition-all cursor-pointer group ${
                   selectedBlockId === block.id
                     ? 'border-primary bg-primary/5'
@@ -702,7 +740,7 @@ export const EmailEditor: FC = () => {
                       <img
                         src={getImageSrc(block.content)}
                         alt={getImageAlt(block.content) || 'Email image'}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     ) : (
                       <span className="material-symbols-outlined">image</span>
@@ -1064,7 +1102,7 @@ export const EmailEditor: FC = () => {
                           <img
                             src={getImageSrc(block.content)}
                             alt="preview"
-                            className="w-full h-24 object-cover rounded"
+                            className="w-full h-24 object-contain rounded"
                           />
                         </div>
                       )}
