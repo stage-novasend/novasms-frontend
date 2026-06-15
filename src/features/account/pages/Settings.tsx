@@ -11,7 +11,7 @@ function loadSettings() {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    // localStorage corrompu ou inaccessible : on repart de zéro
+    // localStorage corrompu
   }
   return {};
 }
@@ -53,14 +53,20 @@ function ToggleRow({
   );
 }
 
+interface BalanceData {
+  creditBalance: number;
+  alertThreshold: number | null;
+  creditLimit: number | null;
+  language: string;
+  timezone: string;
+}
+
 export default function Settings() {
   const { logout } = useAuthStore();
   const saved = loadSettings();
 
-  const [language, setLanguage] = useState<string>((saved.language as string) || 'Français');
-  const [timezone, setTimezone] = useState<string>(
-    (saved.timezone as string) || 'Africa/Abidjan (UTC+0)',
-  );
+  const [language, setLanguage] = useState<string>((saved.language as string) || 'fr');
+  const [timezone, setTimezone] = useState<string>((saved.timezone as string) || 'Africa/Abidjan');
   const [notifCampaigns, setNotifCampaigns] = useState<boolean>(saved.notifCampaigns !== false);
   const [notifCredits, setNotifCredits] = useState<boolean>(saved.notifCredits !== false);
   const [notifReports, setNotifReports] = useState<boolean>(saved.notifReports !== false);
@@ -72,11 +78,7 @@ export default function Settings() {
   );
   const [creditLimitInput, setCreditLimitInput] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [balance, setBalance] = useState<{
-    creditBalance: number;
-    alertThreshold: number | null;
-    creditLimit: number | null;
-  } | null>(null);
+  const [balance, setBalance] = useState<BalanceData | null>(null);
 
   useEffect(() => {
     const fetchBalance = () => {
@@ -86,18 +88,29 @@ export default function Settings() {
           balance: number;
           alertThreshold: number | null;
           creditLimit: number | null;
+          language: string;
+          timezone: string;
         }>('/account/balance')
         .then((res) => {
           setBalance({
             creditBalance: res.data.balance,
             alertThreshold: res.data.alertThreshold,
             creditLimit: res.data.creditLimit ?? null,
+            language: res.data.language ?? 'fr',
+            timezone: res.data.timezone ?? 'Africa/Abidjan',
           });
           if (res.data.alertThreshold && !alertThreshold) {
             setAlertThreshold(String(res.data.alertThreshold));
           }
           if (res.data.creditLimit && !creditLimitInput) {
             setCreditLimitInput(String(res.data.creditLimit));
+          }
+          // Pré-remplir langue et timezone depuis le serveur
+          if (res.data.language) {
+            setLanguage(res.data.language);
+          }
+          if (res.data.timezone) {
+            setTimezone(res.data.timezone);
           }
         })
         .catch(() => {});
@@ -109,12 +122,19 @@ export default function Settings() {
     api
       .get<{
         success: boolean;
-        prefs: { emailOnCampaignDone: boolean; emailOnLowCredits: boolean };
+        prefs: {
+          emailOnCampaignDone: boolean;
+          emailOnLowCredits: boolean;
+          weeklyReportEmail: boolean;
+          automationAlertsEmail: boolean;
+        };
       }>('/account/notification-prefs')
       .then((res) => {
         if (res.data?.prefs) {
           setNotifCampaigns(res.data.prefs.emailOnCampaignDone);
           setNotifCredits(res.data.prefs.emailOnLowCredits);
+          setNotifReports(res.data.prefs.weeklyReportEmail ?? true);
+          setNotifAutomations(res.data.prefs.automationAlertsEmail ?? true);
         }
       })
       .catch(() => {});
@@ -125,8 +145,7 @@ export default function Settings() {
 
   const handleLanguageChange = (lang: string) => {
     setLanguage(lang);
-    // Appliquer immédiatement le changement de langue dans l'app
-    void i18n.changeLanguage(lang === 'Français' ? 'fr' : 'en');
+    void i18n.changeLanguage(lang === 'Français' || lang === 'fr' ? 'fr' : 'en');
   };
 
   const handleSave = async () => {
@@ -146,6 +165,8 @@ export default function Settings() {
     }
 
     setSaving(true);
+
+    // Persister dans localStorage
     const prefs = {
       language,
       timezone,
@@ -156,18 +177,23 @@ export default function Settings() {
       alertThreshold,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(prefs));
+
     try {
-      const settingsPayload: Record<string, number> = {};
+      const settingsPayload: Record<string, unknown> = {};
       if (alertThreshold) settingsPayload['alertThreshold'] = Number(alertThreshold);
       if (parsedCreditLimit !== null) settingsPayload['creditLimit'] = parsedCreditLimit;
+      // Langue et fuseau horaire synchronisés en base
+      settingsPayload['language'] =
+        language === 'Français' ? 'fr' : language === 'English' ? 'en' : language;
+      settingsPayload['timezone'] = timezone;
 
       await Promise.all([
-        Object.keys(settingsPayload).length > 0
-          ? api.patch('/account/settings', settingsPayload)
-          : Promise.resolve(),
+        api.patch('/account/settings', settingsPayload),
         api.patch('/account/notification-prefs', {
           emailOnCampaignDone: notifCampaigns,
           emailOnLowCredits: notifCredits,
+          weeklyReportEmail: notifReports,
+          automationAlertsEmail: notifAutomations,
         }),
       ]);
       toast.success('Préférences enregistrées');
@@ -185,7 +211,7 @@ export default function Settings() {
 
   return (
     <div className="content">
-      {/* En-tête rapide */}
+      {/* En-tête */}
       <div className="card" style={{ padding: '13px 16px' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-12">
@@ -239,7 +265,6 @@ export default function Settings() {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div
-                    className="credits-pill"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -290,7 +315,8 @@ export default function Settings() {
                         />
                       </div>
                       <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {bPct}% · Limite {bMax.toLocaleString('fr-FR')} FCFA
+                        {bPct}% · Alerte sous{' '}
+                        {(balance.alertThreshold ?? 100000).toLocaleString('fr-FR')} FCFA
                       </div>
                     </div>
                   )}
@@ -320,8 +346,8 @@ export default function Settings() {
                 value={language}
                 onChange={(e) => handleLanguageChange(e.target.value)}
               >
-                <option value="Français">Français</option>
-                <option value="English">English</option>
+                <option value="fr">Français</option>
+                <option value="en">English</option>
               </select>
             </div>
             <div>
@@ -333,11 +359,22 @@ export default function Settings() {
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
               >
-                <option value="Africa/Abidjan (UTC+0)">Africa/Abidjan (UTC+0)</option>
-                <option value="Africa/Lagos (UTC+1)">Africa/Lagos (UTC+1)</option>
-                <option value="Africa/Nairobi (UTC+3)">Africa/Nairobi (UTC+3)</option>
-                <option value="Europe/Paris (UTC+1)">Europe/Paris (UTC+1)</option>
-                <option value="America/New_York (UTC-5)">America/New_York (UTC-5)</option>
+                <optgroup label="Afrique">
+                  <option value="Africa/Abidjan">Africa/Abidjan (UTC+0)</option>
+                  <option value="Africa/Lagos">Africa/Lagos (UTC+1)</option>
+                  <option value="Africa/Douala">Africa/Douala (UTC+1)</option>
+                  <option value="Africa/Dakar">Africa/Dakar (UTC+0)</option>
+                  <option value="Africa/Nairobi">Africa/Nairobi (UTC+3)</option>
+                  <option value="Africa/Johannesburg">Africa/Johannesburg (UTC+2)</option>
+                </optgroup>
+                <optgroup label="Europe">
+                  <option value="Europe/Paris">Europe/Paris (UTC+1)</option>
+                  <option value="Europe/London">Europe/London (UTC+0)</option>
+                </optgroup>
+                <optgroup label="Amérique">
+                  <option value="America/New_York">America/New_York (UTC-5)</option>
+                  <option value="America/Chicago">America/Chicago (UTC-6)</option>
+                </optgroup>
               </select>
             </div>
             <div>
@@ -350,7 +387,7 @@ export default function Settings() {
                 className="input"
                 value={alertThreshold}
                 onChange={(e) => setAlertThreshold(e.target.value)}
-                placeholder="ex: 5 000"
+                placeholder="ex: 100 000"
               />
               <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
                 Notification email quand le solde passe sous ce seuil
@@ -369,7 +406,16 @@ export default function Settings() {
                 onChange={(e) => setCreditLimitInput(e.target.value)}
                 placeholder="ex: 50 000"
               />
-              <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  color:
+                    creditLimitInput && balance && Number(creditLimitInput) > balance.creditBalance
+                      ? 'var(--color-error, #ef4444)'
+                      : 'var(--text-3)',
+                  marginTop: 4,
+                }}
+              >
                 Jauge de crédit basée sur cette limite · doit être ≤ solde actuel
                 {balance ? ` (${balance.creditBalance.toLocaleString('fr-FR')} FCFA)` : ''}
               </div>
@@ -412,8 +458,8 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* API Keys */}
-        <div className="card">
+        {/* API Keys — bientôt disponible */}
+        <div className="card" style={{ opacity: 0.8 }}>
           <div className="flex items-center justify-between mb-12">
             <div className="card-title">Clés API</div>
             <span className="chip">Bientôt disponible</span>
@@ -454,7 +500,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Compte & données */}
+        {/* Données & confidentialité */}
         <div className="card">
           <div className="card-title mb-12">Données & confidentialité</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
