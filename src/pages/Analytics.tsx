@@ -466,91 +466,93 @@ export default function Analytics() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                {data.recentOpens.map((r, i) => {
-                  const initials =
-                    [r.contact.firstName, r.contact.lastName]
-                      .filter(Boolean)
-                      .map((n) => n![0].toUpperCase())
-                      .join('') || r.contact.email.slice(0, 2).toUpperCase();
-                  const displayName =
-                    [r.contact.firstName, r.contact.lastName].filter(Boolean).join(' ') ||
-                    r.contact.email;
-                  const isClick = r.action === 'Click';
-                  const elapsed = Math.round(
-                    (Date.now() - new Date(r.createdAt).getTime()) / 60000,
-                  );
-                  const timeLabel =
-                    elapsed < 60
-                      ? `Il y a ${elapsed}min`
-                      : elapsed < 1440
-                        ? `Il y a ${Math.round(elapsed / 60)}h`
-                        : `Il y a ${Math.round(elapsed / 1440)}j`;
-                  return (
-                    <div
-                      key={i}
-                      className="contact-row"
-                      style={{
-                        padding: '5px 0',
-                        borderBottom:
-                          i < data.recentOpens.length - 1 ? '0.5px solid var(--border)' : 'none',
-                      }}
-                    >
+                {(() => {
+                  // eslint-disable-next-line react-hooks/purity
+                  const now = Date.now();
+                  return data.recentOpens.map((r, i) => {
+                    const initials =
+                      [r.contact.firstName, r.contact.lastName]
+                        .filter(Boolean)
+                        .map((n) => n![0].toUpperCase())
+                        .join('') || r.contact.email.slice(0, 2).toUpperCase();
+                    const displayName =
+                      [r.contact.firstName, r.contact.lastName].filter(Boolean).join(' ') ||
+                      r.contact.email;
+                    const isClick = r.action === 'Click';
+                    const elapsed = Math.round((now - new Date(r.createdAt).getTime()) / 60000);
+                    const timeLabel =
+                      elapsed < 60
+                        ? `Il y a ${elapsed}min`
+                        : elapsed < 1440
+                          ? `Il y a ${Math.round(elapsed / 60)}h`
+                          : `Il y a ${Math.round(elapsed / 1440)}j`;
+                    return (
                       <div
-                        className="contact-avatar"
-                        style={{ width: 24, height: 24, fontSize: 9, flexShrink: 0 }}
+                        key={i}
+                        className="contact-row"
+                        style={{
+                          padding: '5px 0',
+                          borderBottom:
+                            i < data.recentOpens.length - 1 ? '0.5px solid var(--border)' : 'none',
+                        }}
                       >
-                        {initials}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 500,
-                            color: 'var(--text-1)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
+                          className="contact-avatar"
+                          style={{ width: 24, height: 24, fontSize: 9, flexShrink: 0 }}
                         >
-                          {displayName}
+                          {initials}
                         </div>
-                        <div
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 500,
+                              color: 'var(--text-1)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {displayName}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: 'var(--text-3)',
+                              marginTop: 1,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {r.campaignName}
+                          </div>
+                        </div>
+                        <span
                           style={{
                             fontSize: 10,
                             color: 'var(--text-3)',
-                            marginTop: 1,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
+                            marginRight: 6,
                           }}
                         >
-                          {r.campaignName}
-                        </div>
+                          {timeLabel}
+                        </span>
+                        <span
+                          className="chip"
+                          style={{
+                            fontSize: 10,
+                            padding: '1px 6px',
+                            background: isClick ? 'var(--brand-light)' : 'var(--muted)',
+                            color: isClick ? 'var(--brand-teal)' : 'var(--text-2)',
+                          }}
+                        >
+                          {isClick ? 'Cliqué' : 'Ouvert'}
+                        </span>
                       </div>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: 'var(--text-3)',
-                          whiteSpace: 'nowrap',
-                          marginRight: 6,
-                        }}
-                      >
-                        {timeLabel}
-                      </span>
-                      <span
-                        className="chip"
-                        style={{
-                          fontSize: 10,
-                          padding: '1px 6px',
-                          background: isClick ? 'var(--brand-light)' : 'var(--muted)',
-                          color: isClick ? 'var(--brand-teal)' : 'var(--text-2)',
-                        }}
-                      >
-                        {isClick ? 'Cliqué' : 'Ouvert'}
-                      </span>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             )}
           </div>
