@@ -260,14 +260,19 @@ export default function Header() {
   const credits = balance?.balance ?? null;
   const alertThreshold = balance?.alertThreshold ?? null;
   const creditLimit = balance?.creditLimit ?? null;
+  // Jauge : base = creditLimit si défini, sinon alertThreshold, sinon 100% si solde > 0
   const gaugeMax =
     creditLimit && creditLimit > 0
       ? creditLimit
       : alertThreshold && alertThreshold > 0
-        ? alertThreshold * 3
+        ? alertThreshold
         : null;
   const creditsPct =
-    credits != null && gaugeMax != null ? Math.min(100, Math.round((credits / gaugeMax) * 100)) : 0;
+    credits != null && gaugeMax != null && gaugeMax > 0
+      ? Math.min(100, Math.round((credits / gaugeMax) * 100))
+      : credits != null && credits > 0
+        ? 100
+        : 0;
 
   const notifications = useMemo(() => {
     const items = recentLogs.map(buildNotification);
@@ -354,12 +359,11 @@ export default function Header() {
               <div className="credits-bar-fill" style={{ width: `${creditsPct}%` }} />
             </div>
             <div className="credits-hint">
-              {creditsPct}% restant
-              {creditLimit
-                ? ` · Limite ${creditLimit.toLocaleString('fr-FR')} FCFA`
-                : alertThreshold
-                  ? ` · Alerte sous ${alertThreshold.toLocaleString('fr-FR')} FCFA`
-                  : ''}
+              {gaugeMax != null
+                ? `${creditsPct}% restant · Alerte < ${alertThreshold?.toLocaleString('fr-FR') ?? '—'} FCFA`
+                : credits != null && credits > 0
+                  ? `${credits.toLocaleString('fr-FR')} FCFA disponible`
+                  : 'Aucun crédit'}
             </div>
           </div>
         </div>

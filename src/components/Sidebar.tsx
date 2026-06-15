@@ -215,7 +215,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
-  const { contactsTotal, credits, loading, refresh } = useAppMetrics();
+  const { contactsTotal, credits, alertThreshold, creditLimit, loading, refresh } = useAppMetrics();
   const { activeDashboard, toggleDashboard, mobileSidebarOpen, setMobileSidebarOpen } =
     useUiStore();
 
@@ -288,17 +288,53 @@ export default function Sidebar() {
                 Recharger ↗
               </button>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="credits-amount">
-                {credits == null ? '--' : credits.toLocaleString('fr-FR')}
-              </span>
-              <div style={{ flex: 1 }}>
-                <div className="credits-bar">
-                  <div className="credits-bar-fill" />
+            {(() => {
+              const gaugeMax =
+                creditLimit && creditLimit > 0
+                  ? creditLimit
+                  : alertThreshold && alertThreshold > 0
+                    ? alertThreshold
+                    : null;
+              const pct =
+                credits != null && gaugeMax != null && gaugeMax > 0
+                  ? Math.min(100, Math.round((credits / gaugeMax) * 100))
+                  : credits != null && credits > 0
+                    ? 100
+                    : 0;
+              const barColor =
+                pct < 20
+                  ? 'var(--color-error, #ef4444)'
+                  : pct < 50
+                    ? '#f59e0b'
+                    : 'var(--brand-gradient)';
+              const hint = loading
+                ? 'Chargement…'
+                : gaugeMax != null
+                  ? `${pct}% · Alerte < ${alertThreshold ? alertThreshold.toLocaleString('fr-FR') : '—'} FCFA`
+                  : credits != null && credits > 0
+                    ? `${credits.toLocaleString('fr-FR')} FCFA disponible`
+                    : 'Aucun crédit';
+              return (
+                <div className="flex items-center gap-3">
+                  <span className="credits-amount">
+                    {credits == null ? '--' : credits.toLocaleString('fr-FR')}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div className="credits-bar">
+                      <div
+                        className="credits-bar-fill"
+                        style={{
+                          width: `${pct}%`,
+                          background: barColor,
+                          transition: 'width 0.4s ease',
+                        }}
+                      />
+                    </div>
+                    <div className="credits-hint">{hint}</div>
+                  </div>
                 </div>
-                <div className="credits-hint">{loading ? 'Chargement…' : 'Mise à jour ok'}</div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
         )}
 
