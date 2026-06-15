@@ -30,6 +30,7 @@ import {
   Plus,
   X,
   Download,
+  Trash2,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { contactsApi } from '@/api/contacts';
@@ -550,16 +551,19 @@ export default function ContactTable({
             <Plus className="w-4 h-4" />
             Ajouter un contact
           </button>
-          {selectedContactIds.size > 0 && (
-            <button
-              onClick={deleteSelectedContacts}
-              disabled={isDeleting}
-              className="px-4 py-2 bg-error text-white font-medium rounded-lg hover:bg-error/90 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <X className="w-4 h-4" />
-              Supprimer {selectedContactIds.size} contact{selectedContactIds.size > 1 ? 's' : ''}
-            </button>
-          )}
+          <button
+            onClick={toggleSelectAll}
+            className={`px-4 py-2 border rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+              selectedContactIds.size > 0
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-outline-variant text-on-surface-variant hover:bg-surface-container'
+            }`}
+          >
+            <CheckCircle className="w-4 h-4" />
+            {selectedContactIds.size > 0
+              ? `${selectedContactIds.size} sélectionné${selectedContactIds.size > 1 ? 's' : ''}`
+              : 'Sélectionner'}
+          </button>
         </div>
 
         {/* Search */}
@@ -1097,6 +1101,52 @@ export default function ContactTable({
           <span className="ml-2 text-sm text-on-surface-variant">Chargement...</span>
         </div>
       )}
+
+      {/* Barre d'actions bulk — apparaît quand des contacts sont sélectionnés */}
+      <AnimatePresence>
+        {selectedContactIds.size > 0 && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 bg-surface border border-outline-variant rounded-2xl shadow-xl"
+          >
+            <span className="text-sm font-semibold text-on-surface">
+              {selectedContactIds.size} contact{selectedContactIds.size > 1 ? 's' : ''} sélectionné
+              {selectedContactIds.size > 1 ? 's' : ''}
+            </span>
+            <div className="w-px h-5 bg-outline-variant" />
+            <button
+              onClick={toggleSelectAll}
+              className="text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              {selectedContactIds.size === contacts.length
+                ? 'Tout désélectionner'
+                : 'Tout sélectionner'}
+            </button>
+            <button
+              onClick={deleteSelectedContacts}
+              disabled={isDeleting}
+              className="flex items-center gap-2 px-4 py-2 bg-error text-white text-sm font-medium rounded-xl hover:bg-error/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDeleting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              Supprimer
+            </button>
+            <button
+              onClick={() => setSelectedContactIds(new Set())}
+              className="p-1.5 rounded-lg hover:bg-surface-container transition-colors text-on-surface-variant"
+              aria-label="Annuler la sélection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
