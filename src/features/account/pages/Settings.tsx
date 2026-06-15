@@ -99,13 +99,13 @@ export default function Settings() {
             language: res.data.language ?? 'fr',
             timezone: res.data.timezone ?? 'Africa/Abidjan',
           });
-          if (res.data.alertThreshold && !alertThreshold) {
+          // Toujours utiliser les valeurs DB comme source de vérité
+          if (res.data.alertThreshold != null) {
             setAlertThreshold(String(res.data.alertThreshold));
           }
-          if (res.data.creditLimit && !creditLimitInput) {
+          if (res.data.creditLimit != null) {
             setCreditLimitInput(String(res.data.creditLimit));
           }
-          // Pré-remplir langue et timezone depuis le serveur
           if (res.data.language) {
             setLanguage(res.data.language);
           }
@@ -145,7 +145,8 @@ export default function Settings() {
 
   const handleLanguageChange = (lang: string) => {
     setLanguage(lang);
-    void i18n.changeLanguage(lang === 'Français' || lang === 'fr' ? 'fr' : 'en');
+    // lang est 'fr' ou 'en' (valeurs du select)
+    void i18n.changeLanguage(lang === 'fr' ? 'fr' : 'en');
   };
 
   const handleSave = async () => {
@@ -179,13 +180,12 @@ export default function Settings() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(prefs));
 
     try {
-      const settingsPayload: Record<string, unknown> = {};
+      const settingsPayload: Record<string, unknown> = {
+        language, // déjà 'fr' ou 'en'
+        timezone,
+      };
       if (alertThreshold) settingsPayload['alertThreshold'] = Number(alertThreshold);
       if (parsedCreditLimit !== null) settingsPayload['creditLimit'] = parsedCreditLimit;
-      // Langue et fuseau horaire synchronisés en base
-      settingsPayload['language'] =
-        language === 'Français' ? 'fr' : language === 'English' ? 'en' : language;
-      settingsPayload['timezone'] = timezone;
 
       await Promise.all([
         api.patch('/account/settings', settingsPayload),
@@ -196,6 +196,10 @@ export default function Settings() {
           automationAlertsEmail: notifAutomations,
         }),
       ]);
+
+      // Rafraîchir la jauge header + sidebar immédiatement
+      window.dispatchEvent(new Event('novasms:balance-refresh'));
+
       toast.success('Préférences enregistrées');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
