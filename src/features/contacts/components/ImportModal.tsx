@@ -40,6 +40,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentChunk, setCurrentChunk] = useState(0);
   const [totalChunks, setTotalChunks] = useState(0);
+  const [processingJob, setProcessingJob] = useState(false);
 
   // Champs NovaSMS attendus
   const targetFields = [
@@ -61,6 +62,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
     setUploadProgress(0);
     setCurrentChunk(0);
     setTotalChunks(0);
+    setProcessingJob(false);
     onClose();
   }, [onClose]);
 
@@ -142,29 +144,72 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
           setUploadProgress(Math.round((chunkNum / numChunks) * 100));
         }
 
-        // 3) Finaliser l'import
+        // 3) Déclencher le job BullMQ (retour immédiat avec jobId)
         setUploadProgress(95);
         const completeRes = await api.post(
           '/contacts/import/complete',
           { fileId, fileName: file.name },
           { headers: { Authorization: `Bearer ${accessToken}` } },
         );
-        setUploadProgress(100);
+        const jobId: string = completeRes.data.jobId;
 
-        if (completeRes.data.success) {
-          setStep('report');
-          const importedReport: ImportReport = {
-            jobId: completeRes.data.result?.jobId || `import-${Date.now()}`,
-            fileName: file.name,
-            totalRecords: completeRes.data.result?.report?.totalRecords || parsedData.rows.length,
-            successCount: completeRes.data.result?.report?.successCount || 0,
-            duplicateCount: completeRes.data.result?.report?.duplicateCount || 0,
-            errorCount: completeRes.data.result?.report?.errorCount || 0,
-            status: 'completed',
-          };
-          setReport(importedReport);
-          onImportComplete(importedReport);
-        }
+        // 4) Polling du statut jusqu'à completion (toutes les 2s, timeout 5min)
+        setProcessingJob(true);
+        await new Promise<void>((resolve, reject) => {
+          const POLL_INTERVAL = 2000;
+          const TIMEOUT_MS = 5 * 60 * 1000;
+          let elapsed = 0;
+
+          const interval = setInterval(() => {
+            elapsed += POLL_INTERVAL;
+            void (async () => {
+              try {
+                const statusRes = await api.get<{
+                  success: boolean;
+                  status: string;
+                  report?: {
+                    totalRecords: number;
+                    successCount: number;
+                    duplicateCount: number;
+                    errorCount: number;
+                  };
+                }>(`/contacts/import/${jobId}`, {
+                  headers: { Authorization: `Bearer ${accessToken}` },
+                });
+
+                if (statusRes.data.status === 'completed') {
+                  clearInterval(interval);
+                  setUploadProgress(100);
+                  setProcessingJob(false);
+                  const r = statusRes.data.report;
+                  const importedReport: ImportReport = {
+                    jobId,
+                    fileName: file.name,
+                    totalRecords: r?.totalRecords ?? parsedData.rows.length,
+                    successCount: r?.successCount ?? 0,
+                    duplicateCount: r?.duplicateCount ?? 0,
+                    errorCount: r?.errorCount ?? 0,
+                    status: 'completed',
+                  };
+                  setReport(importedReport);
+                  onImportComplete(importedReport);
+                  setStep('report');
+                  resolve();
+                } else if (statusRes.data.status === 'failed') {
+                  clearInterval(interval);
+                  setProcessingJob(false);
+                  reject(new Error("L'import a échoué côté serveur. Veuillez réessayer."));
+                } else if (elapsed >= TIMEOUT_MS) {
+                  clearInterval(interval);
+                  setProcessingJob(false);
+                  reject(new Error('Délai de traitement dépassé (5 min). Vérifiez les imports.'));
+                }
+              } catch {
+                // erreur réseau passagère — on continue de poller
+              }
+            })();
+          }, POLL_INTERVAL);
+        });
       } else {
         // Petit fichier: comportement existant (POST unique)
         setStep('progress');
@@ -358,19 +403,19 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-medium text-on-surface">
-                      Téléchargement en cours...
+                      {processingJob ? 'Traitement des données...' : 'Téléchargement en cours...'}
                     </p>
                     <p className="text-sm text-on-surface-variant">{uploadProgress}%</p>
                   </div>
                   <div className="w-full h-2 bg-outline-variant/30 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-primary transition-all duration-300"
+                      className={`h-full transition-all duration-300 ${processingJob ? 'bg-primary/60 animate-pulse' : 'bg-primary'}`}
                       style={{ width: `${uploadProgress}%` }}
                     />
                   </div>
                 </div>
 
-                {totalChunks > 1 && (
+                {!processingJob && totalChunks > 1 && (
                   <div className="text-sm text-on-surface-variant text-center">
                     Envoi chunk {currentChunk} / {totalChunks}
                   </div>
@@ -379,9 +424,20 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
                 <div className="flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 text-primary animate-spin" />
                   <p className="text-sm text-on-surface-variant">
-                    {totalChunks > 1 ? 'Import volumineux en cours...' : 'Traitement en cours...'}
+                    {processingJob
+                      ? 'Import en cours en arrière-plan...'
+                      : totalChunks > 1
+                        ? 'Import volumineux en cours...'
+                        : 'Traitement en cours...'}
                   </p>
                 </div>
+
+                {processingJob && (
+                  <p className="text-xs text-on-surface-variant text-center">
+                    Les contacts sont en cours d&apos;insertion. Cette étape peut prendre quelques
+                    secondes pour 50 000 lignes.
+                  </p>
+                )}
               </div>
             )}
 
