@@ -15,7 +15,7 @@ export default function ResetPassword() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
   const submitRequestReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +38,7 @@ export default function ResetPassword() {
       const json = await res.json();
 
       if (!res.ok || !json?.success) {
-        setError(json?.message || 'Impossible d\'envoyer le lien de réinitialisation.');
+        setError(json?.message || "Impossible d'envoyer le lien de réinitialisation.");
         return;
       }
 
@@ -68,7 +68,9 @@ export default function ResetPassword() {
       /[^A-Za-z0-9]/.test(newPassword),
     ];
     if (checks.some((c) => !c)) {
-      setError('Mot de passe faible. Requis: 8+ caractères, 1 majuscule, 1 chiffre, 1 caractère spécial.');
+      setError(
+        'Mot de passe faible. Requis: 8+ caractères, 1 majuscule, 1 chiffre, 1 caractère spécial.',
+      );
       return;
     }
 
@@ -118,7 +120,10 @@ export default function ResetPassword() {
             : 'Entrez votre email pour recevoir un lien de réinitialisation.'}
         </p>
 
-        <form onSubmit={hasToken ? submitReset : submitRequestReset} className="space-y-4 text-left">
+        <form
+          onSubmit={hasToken ? submitReset : submitRequestReset}
+          className="space-y-4 text-left"
+        >
           {hasToken ? (
             <>
               <div>
@@ -173,9 +178,7 @@ export default function ResetPassword() {
           )}
 
           {success && (
-            <div className="p-3 bg-primary/10 text-primary rounded-lg text-sm">
-              {success}
-            </div>
+            <div className="p-3 bg-primary/10 text-primary rounded-lg text-sm">{success}</div>
           )}
 
           <button
