@@ -20,6 +20,26 @@ type Invitation = {
   expiresAt: string;
 };
 
+type ChannelStat = {
+  channel: string;
+  totalCost: number;
+  totalContacts: number;
+  operationCount: number;
+};
+type SourceStat = { source: string; totalCost: number; operationCount: number };
+type MemberStat = {
+  userId: string | null;
+  user: { id: string; email: string; firstName: string | null; lastName: string | null } | null;
+  totalCost: number;
+  operationCount: number;
+};
+type SpendingSummary = {
+  monthTotal: number;
+  byChannel: ChannelStat[];
+  bySource: SourceStat[];
+  byMember: MemberStat[];
+};
+
 const ROLE_LABELS: Record<TeamRole, string> = {
   Admin: 'Admin',
   Editor: 'Éditeur',
@@ -98,6 +118,7 @@ export default function Team() {
   const [inviting, setInviting] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [spending, setSpending] = useState<SpendingSummary | null>(null);
 
   const loadTeam = async () => {
     try {
@@ -116,8 +137,19 @@ export default function Team() {
     }
   };
 
+  const loadSpending = async () => {
+    if (currentUser?.role !== 'Admin') return;
+    try {
+      const res = await api.get<SpendingSummary>('/account/credit-usage/summary');
+      setSpending(res.data);
+    } catch {
+      // non-bloquant si l'utilisateur n'est pas admin
+    }
+  };
+
   useEffect(() => {
     void loadTeam();
+    void loadSpending();
   }, []);
 
   const pendingInvites = useMemo(
@@ -443,6 +475,178 @@ export default function Team() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Dépenses du mois — admin seulement */}
+      {currentUser?.role === 'Admin' && spending && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-12">
+            <div className="card-title">Dépenses ce mois</div>
+            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand)' }}>
+              {spending.monthTotal.toLocaleString('fr-FR')} FCFA
+            </span>
+          </div>
+
+          {/* Par canal */}
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 600,
+                color: 'var(--text-3)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: 8,
+              }}
+            >
+              Par canal
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {spending.byChannel.map((c) => (
+                <div
+                  key={c.channel}
+                  style={{
+                    flex: '1 1 120px',
+                    background: 'var(--muted)',
+                    borderRadius: 10,
+                    padding: '10px 14px',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: 'var(--text-3)',
+                      textTransform: 'uppercase',
+                      marginBottom: 4,
+                    }}
+                  >
+                    {c.channel}
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                    {c.totalCost.toLocaleString('fr-FR')} FCFA
+                  </div>
+                  <div style={{ fontSize: 10.5, color: 'var(--text-2)', marginTop: 2 }}>
+                    {c.operationCount} envoi{c.operationCount > 1 ? 's' : ''} ·{' '}
+                    {c.totalContacts.toLocaleString('fr-FR')} contacts
+                  </div>
+                </div>
+              ))}
+              {spending.byChannel.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  Aucune dépense enregistrée
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Par source */}
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 600,
+                color: 'var(--text-3)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                marginBottom: 8,
+              }}
+            >
+              Par source
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {spending.bySource.map((s) => {
+                const srcLabel: Record<string, string> = {
+                  CAMPAIGN: 'Campagnes',
+                  AUTOMATION: 'Automatisations',
+                  API: 'API publique',
+                };
+                return (
+                  <div
+                    key={s.source}
+                    style={{
+                      flex: '1 1 120px',
+                      background: 'var(--muted)',
+                      borderRadius: 10,
+                      padding: '10px 14px',
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: 'var(--text-3)',
+                        textTransform: 'uppercase',
+                        marginBottom: 4,
+                      }}
+                    >
+                      {srcLabel[s.source] ?? s.source}
+                    </div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                      {s.totalCost.toLocaleString('fr-FR')} FCFA
+                    </div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-2)', marginTop: 2 }}>
+                      {s.operationCount} opération{s.operationCount > 1 ? 's' : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Par membre */}
+          {spending.byMember.length > 0 && (
+            <div>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  color: 'var(--text-3)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 8,
+                }}
+              >
+                Par membre
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {spending.byMember.map((m) => {
+                  const name = m.user
+                    ? [m.user.firstName, m.user.lastName].filter(Boolean).join(' ') || m.user.email
+                    : 'Membre inconnu';
+                  return (
+                    <div
+                      key={m.userId ?? 'anon'}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        background: 'var(--muted)',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <div className="flex items-center gap-8">
+                        {m.user && <Avatar email={m.user.email} size={28} />}
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)' }}>
+                            {name}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: 'var(--text-2)' }}>
+                            {m.operationCount} envoi{m.operationCount > 1 ? 's' : ''}
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)' }}>
+                        {m.totalCost.toLocaleString('fr-FR')} FCFA
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
