@@ -53,6 +53,7 @@ const Settings = React.lazy(() => import('./features/account/pages/Settings'));
 const Profile = React.lazy(() => import('./features/account/pages/Profile'));
 const AuditLogs = React.lazy(() => import('./features/account/pages/AuditLogs'));
 const Integrations = React.lazy(() => import('./features/account/pages/Integrations'));
+const StatusPage = React.lazy(() => import('./pages/StatusPage'));
 
 import './index.css';
 
@@ -86,6 +87,9 @@ ReactDOM.createRoot(rootElement).render(
             <Route path="/solutions" element={<Solutions />} />
             <Route path="/tarifs" element={<Tarifs />} />
             <Route path="/ressources" element={<Ressources />} />
+
+            {/* Page de statut publique */}
+            <Route path="/status" element={<StatusPage />} />
 
             {/* Auth Routes */}
             <Route path="/login" element={<Login />} />
