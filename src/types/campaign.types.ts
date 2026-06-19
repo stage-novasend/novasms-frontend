@@ -183,18 +183,43 @@ export const CONTACT_VARIABLES = {
   },
 };
 
-// SMS Cost Configuration (from backend)
+// Tarifs SMS — synchronisés avec backend/src/common/billing.util.ts
+// GSM7 (lettres standards) : 1 SMS = 160 car., multi-parties = 153 car./partie
+// Unicode (émojis, accents spéciaux) : 1 SMS = 70 car., multi-parties = 67 car./partie
 export const SMS_COST_CONFIG = {
-  pricePerSegment: 0.08, // FCFA
-  segmentLength: 160, // characters
+  pricePerSms: 12, // FCFA par SMS (1 partie)
+  gsm7Single: 160,
+  gsm7Multi: 153,
+  unicodeSingle: 70,
+  unicodeMulti: 67,
   currency: 'XOF',
 };
 
-export const calculateSMSCost = (messageLength: number, recipientCount: number): number => {
-  const segments = Math.ceil(messageLength / SMS_COST_CONFIG.segmentLength);
-  return segments * SMS_COST_CONFIG.pricePerSegment * recipientCount;
+const GSM7_EXTENDED = 'ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ';
+
+function isUnicode(text: string): boolean {
+  return [...text].some((ch) => {
+    const code = ch.charCodeAt(0);
+    return code > 127 && !GSM7_EXTENDED.includes(ch);
+  });
+}
+
+export const calculateSMSSegments = (textOrLength: string | number): number => {
+  if (typeof textOrLength === 'number') {
+    const len = textOrLength;
+    if (len <= SMS_COST_CONFIG.gsm7Single) return 1;
+    return Math.ceil(len / SMS_COST_CONFIG.gsm7Multi);
+  }
+  const text = textOrLength;
+  if (!text || text.length === 0) return 1;
+  const unicode = isUnicode(text);
+  const limitSingle = unicode ? SMS_COST_CONFIG.unicodeSingle : SMS_COST_CONFIG.gsm7Single;
+  const limitMulti = unicode ? SMS_COST_CONFIG.unicodeMulti : SMS_COST_CONFIG.gsm7Multi;
+  if (text.length <= limitSingle) return 1;
+  return Math.ceil(text.length / limitMulti);
 };
 
-export const calculateSMSSegments = (messageLength: number): number => {
-  return Math.ceil(messageLength / SMS_COST_CONFIG.segmentLength);
+export const calculateSMSCost = (textOrLength: string | number, recipientCount: number): number => {
+  const segments = calculateSMSSegments(textOrLength);
+  return segments * SMS_COST_CONFIG.pricePerSms * recipientCount;
 };
