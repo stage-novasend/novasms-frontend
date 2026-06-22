@@ -18,7 +18,7 @@ type ParsedImportData = {
   preview: Record<string, unknown>[];
 };
 
-const SUPPORTED_FORMATS = ['text/csv', 'application/vnd.ms-excel'];
+const EXCEL_EXTENSIONS = ['xls', 'xlsx'];
 
 export default function ImportModal({ isOpen, onClose, onImportComplete }: ImportModalProps) {
   const { accessToken } = useAuthStore();
@@ -66,12 +66,15 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
-    if (!SUPPORTED_FORMATS.includes(selectedFile.type)) {
+    const ext = selectedFile.name.split('.').pop()?.toLowerCase() ?? '';
+    const isExcel = EXCEL_EXTENSIONS.includes(ext);
+    const isCsv = ext === 'csv' || selectedFile.type === 'text/csv';
+
+    if (!isExcel && !isCsv) {
       setError('Format non supporté. Utilisez CSV, XLS ou XLSX.');
       return;
     }
 
-    // RG-08: Max 50k lignes
     if (selectedFile.size > 50 * 1024 * 1024) {
       setError('Fichier trop volumineux. Maximum 50 Mo.');
       return;
@@ -80,12 +83,42 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
     setFile(selectedFile);
     setError(null);
 
+    if (isExcel) {
+      // Envoyer le fichier au backend pour parsing Excel
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        const res = await api.post<{
+          headers: string[];
+          rows: Record<string, unknown>[];
+          preview: Record<string, unknown>[];
+          totalRows: number;
+        }>('/contacts/import/parse-excel', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        if (res.data.totalRows === 0) {
+          setError('Le fichier est vide ou ne contient pas de données.');
+          return;
+        }
+        setParsedData({
+          headers: res.data.headers,
+          rows: res.data.rows,
+          preview: res.data.preview,
+        });
+        setStep('mapping');
+      } catch (err: unknown) {
+        const e = err as { response?: { data?: { message?: string } } };
+        setError(e.response?.data?.message ?? 'Impossible de lire le fichier Excel.');
+      }
+      return;
+    }
+
+    // CSV → papaparse
     const result = await parseFile(selectedFile);
     if (result.error) {
       setError(result.error);
       return;
     }
-
     setParsedData({ headers: result.headers, rows: result.rows, preview: result.preview });
     setStep('mapping');
   };
@@ -301,7 +334,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
                 <div className="border-2 border-dashed border-outline-variant rounded-xl p-8 text-center hover:border-primary/50 transition-colors">
                   <input
                     type="file"
-                    accept=".csv,.xls"
+                    accept=".csv,.xls,.xlsx"
                     onChange={handleFileSelect}
                     className="hidden"
                     id="file-input"
