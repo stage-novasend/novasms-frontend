@@ -151,11 +151,11 @@ export default function Login() {
             {requiresTwoFactor && (
               <div>
                 <label className="block text-sm font-semibold text-on-surface mb-1">
-                  Code de vérification
+                  Code d'authentification
                 </label>
                 <input
                   type="text"
-                  inputMode="text"
+                  inputMode="numeric"
                   value={twoFactorCode}
                   onChange={(e) => setTwoFactorCode(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-outline-variant bg-surface focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all tracking-[0.25em] text-center"
@@ -164,7 +164,8 @@ export default function Login() {
                   required
                 />
                 <p className="mt-2 text-xs text-on-surface-variant">
-                  {twoFactorMessage || 'Saisissez le code email ou un code de secours.'}
+                  {twoFactorMessage ||
+                    'Saisissez le code de votre appli Authenticator ou un code de secours.'}
                 </p>
               </div>
             )}

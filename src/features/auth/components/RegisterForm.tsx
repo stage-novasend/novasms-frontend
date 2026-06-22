@@ -18,6 +18,9 @@ const RegisterSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Au moins 1 caractère spécial requis'),
   nomBoutique: z.string().min(2, 'Le nom de la boutique est requis'),
   pays: z.string().min(2, 'Le pays est requis'),
+  acceptCGU: z.boolean().refine((v) => v === true, {
+    message: "Vous devez accepter les conditions d'utilisation",
+  }),
 });
 type RegisterDto = z.infer<typeof RegisterSchema>;
 
@@ -41,12 +44,12 @@ export default function RegisterForm() {
     setValue,
   } = useForm<RegisterDto>({
     resolver: zodResolver(RegisterSchema),
-    defaultValues: { pays: 'CI', email: initialEmail },
+    defaultValues: { pays: 'CI', email: initialEmail, acceptCGU: false },
   });
 
   const password = useWatch({ control, name: 'motDePasse' });
   const selectedCountry = useWatch({ control, name: 'pays' });
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
   const onSubmit = async (data: RegisterDto) => {
     setIsLoading(true);
@@ -177,17 +180,27 @@ export default function RegisterForm() {
       </div>
 
       <div className="flex items-start gap-3 pt-2">
-        <input type="checkbox" id="cgu" className="mt-1 w-4 h-4 accent-primary" />
-        <label htmlFor="cgu" className="text-sm text-on-surface-variant">
-          J'accepte les{' '}
-          <a href="#" className="text-primary">
-            Conditions
-          </a>{' '}
-          et la{' '}
-          <a href="#" className="text-primary">
-            Politique de confidentialité
-          </a>
-        </label>
+        <input
+          {...register('acceptCGU')}
+          type="checkbox"
+          id="cgu"
+          className="mt-1 w-4 h-4 accent-primary"
+        />
+        <div>
+          <label htmlFor="cgu" className="text-sm text-on-surface-variant">
+            J'accepte les{' '}
+            <a href="#" className="text-primary">
+              Conditions
+            </a>{' '}
+            et la{' '}
+            <a href="#" className="text-primary">
+              Politique de confidentialité
+            </a>
+          </label>
+          {errors.acceptCGU && (
+            <p className="mt-1 text-xs text-red-600">{errors.acceptCGU.message}</p>
+          )}
+        </div>
       </div>
 
       <button

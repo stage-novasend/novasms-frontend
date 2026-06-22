@@ -20,6 +20,7 @@ window.addEventListener('error', (event) => {
 
 // Protected Routes & Layouts (toujours chargés)
 import ProtectedRoute from './features/auth/components/ProtectedRoute';
+import RoleGuard from './features/auth/components/RoleGuard';
 import AppLayout from './components/AppLayout';
 
 // === Code-splitting : pages marketing ===
@@ -36,6 +37,7 @@ const ConfirmEmail = React.lazy(() => import('./features/auth/pages/ConfirmEmail
 const VerifyEmail = React.lazy(() => import('./features/auth/pages/VerifyEmail'));
 const ConfirmationSuccess = React.lazy(() => import('./features/auth/pages/ConfirmationSuccess'));
 const ResetPassword = React.lazy(() => import('./features/auth/pages/ResetPassword'));
+const AcceptInvitation = React.lazy(() => import('./features/auth/pages/AcceptInvitation'));
 
 // === Code-splitting : pages protégées ===
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -53,6 +55,7 @@ const Settings = React.lazy(() => import('./features/account/pages/Settings'));
 const Profile = React.lazy(() => import('./features/account/pages/Profile'));
 const AuditLogs = React.lazy(() => import('./features/account/pages/AuditLogs'));
 const Integrations = React.lazy(() => import('./features/account/pages/Integrations'));
+const Developers = React.lazy(() => import('./features/account/pages/Developers'));
 const StatusPage = React.lazy(() => import('./pages/StatusPage'));
 
 import './index.css';
@@ -99,6 +102,7 @@ ReactDOM.createRoot(rootElement).render(
             <Route path="/confirmation-success" element={<ConfirmationSuccess />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
+            <Route path="/accept-invitation/:token" element={<AcceptInvitation />} />
 
             {/* Protected Routes with AppLayout */}
             <Route
@@ -108,24 +112,132 @@ ReactDOM.createRoot(rootElement).render(
                 </ProtectedRoute>
               }
             >
+              {/* Accessible à tous les rôles */}
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/contacts/:id" element={<ContactDetail />} />
-              <Route path="/campaigns" element={<Campaigns />} />
-              <Route path="/campaigns/new" element={<CampaignEditor />} />
-              <Route path="/campaigns/:id" element={<CampaignEditor />} />
-              <Route path="/campaigns/:id/edit" element={<CampaignEditor />} />
-              <Route path="/campaigns/:id/report" element={<CampaignReport />} />
-              <Route path="/automations" element={<Automations />} />
               <Route path="/analytics" element={<Analytics />} />
-              <Route path="/segments" element={<Contacts />} />
-              <Route path="/rechargement" element={<Rechargement />} />
               <Route path="/account/profile" element={<Profile />} />
               <Route path="/account/security" element={<Security />} />
-              <Route path="/account/team" element={<Team />} />
               <Route path="/account/settings" element={<Settings />} />
-              <Route path="/account/audit-logs" element={<AuditLogs />} />
-              <Route path="/account/integrations" element={<Integrations />} />
+
+              {/* Admin + Editor uniquement */}
+              <Route
+                path="/contacts"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <Contacts />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/contacts/:id"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <ContactDetail />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/campaigns"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <Campaigns />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/campaigns/new"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <CampaignEditor />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/campaigns/:id"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <CampaignEditor />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/campaigns/:id/edit"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <CampaignEditor />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/automations"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <Automations />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/segments"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor']}>
+                    <Contacts />
+                  </RoleGuard>
+                }
+              />
+
+              {/* Rapports de campagne — Admin, Editor, Analyst */}
+              <Route
+                path="/campaigns/:id/report"
+                element={
+                  <RoleGuard roles={['Admin', 'Editor', 'Analyst']}>
+                    <CampaignReport />
+                  </RoleGuard>
+                }
+              />
+
+              {/* Admin uniquement */}
+              <Route
+                path="/rechargement"
+                element={
+                  <RoleGuard roles={['Admin']}>
+                    <Rechargement />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/account/team"
+                element={
+                  <RoleGuard roles={['Admin']}>
+                    <Team />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/account/developers"
+                element={
+                  <RoleGuard roles={['Admin']}>
+                    <Developers />
+                  </RoleGuard>
+                }
+              />
+
+              {/* Admin + Analyst */}
+              <Route
+                path="/account/audit-logs"
+                element={
+                  <RoleGuard roles={['Admin', 'Analyst']}>
+                    <AuditLogs />
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/account/integrations"
+                element={
+                  <RoleGuard roles={['Admin']}>
+                    <Integrations />
+                  </RoleGuard>
+                }
+              />
             </Route>
           </Routes>
         </React.Suspense>

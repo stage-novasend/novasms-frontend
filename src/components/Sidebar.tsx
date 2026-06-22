@@ -215,6 +215,12 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
+  const userRole = (useAuthStore((state) => state.user?.role) ?? 'Admin') as
+    | 'Admin'
+    | 'Editor'
+    | 'Analyst';
+  const isAdmin = userRole === 'Admin';
+  const isAdminOrEditor = userRole === 'Admin' || userRole === 'Editor';
   const { contactsTotal, credits, alertThreshold, creditLimit, loading, refresh } = useAppMetrics();
   const { activeDashboard, toggleDashboard, mobileSidebarOpen, setMobileSidebarOpen } =
     useUiStore();
@@ -354,31 +360,37 @@ export default function Sidebar() {
           </span>
           {!collapsed && <span className="nav-text">Tableau de bord</span>}
         </a>
-        <Item
-          to="/contacts"
-          id="tour-nav-contacts"
-          icon={<ContactsIcon />}
-          label="Contacts"
-          badge={contactsTotal > 0 ? contactsTotal.toLocaleString('fr-FR') : undefined}
-          collapsed={collapsed}
-          onNavigate={closeMobile}
-        />
-        <Item
-          to="/campaigns"
-          id="tour-nav-campaigns"
-          icon={<CampaignsIcon />}
-          label="Campagnes"
-          collapsed={collapsed}
-          onNavigate={closeMobile}
-        />
-        <Item
-          to="/automations"
-          id="tour-nav-automations"
-          icon={<AutomationsIcon />}
-          label="Automatisations"
-          collapsed={collapsed}
-          onNavigate={closeMobile}
-        />
+        {isAdminOrEditor && (
+          <Item
+            to="/contacts"
+            id="tour-nav-contacts"
+            icon={<ContactsIcon />}
+            label="Contacts"
+            badge={contactsTotal > 0 ? contactsTotal.toLocaleString('fr-FR') : undefined}
+            collapsed={collapsed}
+            onNavigate={closeMobile}
+          />
+        )}
+        {isAdminOrEditor && (
+          <Item
+            to="/campaigns"
+            id="tour-nav-campaigns"
+            icon={<CampaignsIcon />}
+            label="Campagnes"
+            collapsed={collapsed}
+            onNavigate={closeMobile}
+          />
+        )}
+        {isAdminOrEditor && (
+          <Item
+            to="/automations"
+            id="tour-nav-automations"
+            icon={<AutomationsIcon />}
+            label="Automatisations"
+            collapsed={collapsed}
+            onNavigate={closeMobile}
+          />
+        )}
         <Item
           to="/analytics"
           id="tour-nav-analytics"
@@ -390,14 +402,16 @@ export default function Sidebar() {
 
         <div className="sb-divider" />
         {!collapsed && <div className="sb-section-label">Compte</div>}
-        <Item
-          to="/rechargement"
-          id="tour-nav-rechargement"
-          icon={<CreditsIcon />}
-          label="Crédits"
-          collapsed={collapsed}
-          onNavigate={closeMobile}
-        />
+        {isAdmin && (
+          <Item
+            to="/rechargement"
+            id="tour-nav-rechargement"
+            icon={<CreditsIcon />}
+            label="Crédits"
+            collapsed={collapsed}
+            onNavigate={closeMobile}
+          />
+        )}
         <Item
           to="/account/security"
           icon={<SecurityIcon />}
@@ -405,13 +419,15 @@ export default function Sidebar() {
           collapsed={collapsed}
           onNavigate={closeMobile}
         />
-        <Item
-          to="/account/team"
-          icon={<TeamIcon />}
-          label="Équipe"
-          collapsed={collapsed}
-          onNavigate={closeMobile}
-        />
+        {isAdmin && (
+          <Item
+            to="/account/team"
+            icon={<TeamIcon />}
+            label="Équipe"
+            collapsed={collapsed}
+            onNavigate={closeMobile}
+          />
+        )}
         <Item
           to="/account/settings"
           icon={<SettingsIcon />}

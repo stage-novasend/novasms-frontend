@@ -1,10 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/api/axios';
 import { toast } from 'sonner';
 import i18n from '@/i18n/index';
+import { apiKeysApi, type ApiKeyItem, type NewApiKey, type ApiKeyStats } from '@/api/apiKeys';
 
 const SETTINGS_KEY = 'novasms_settings';
+
+const PERMISSION_GROUPS = [
+  {
+    id: 'messaging',
+    label: 'Envoyer des SMS et emails',
+    description: "Permet à votre site ou application d'envoyer des messages à vos contacts",
+    scopes: ['sms:send', 'email:send'],
+  },
+  {
+    id: 'contacts',
+    label: 'Ajouter et gérer des contacts',
+    description: 'Permet de créer ou modifier des contacts dans votre liste',
+    scopes: ['contacts:read', 'contacts:write'],
+  },
+  {
+    id: 'analytics',
+    label: 'Consulter les statistiques',
+    description: 'Permet de lire votre solde de crédits et vos statistiques',
+    scopes: ['balance:read'],
+  },
+  {
+    id: 'campaigns',
+    label: 'Lire les campagnes',
+    description: 'Permet de consulter vos campagnes existantes',
+    scopes: ['campaigns:read'],
+  },
+];
 
 function loadSettings() {
   try {
@@ -63,7 +91,12 @@ interface BalanceData {
 
 export default function Settings() {
   const { logout } = useAuthStore();
+  const userRole = (useAuthStore((s) => s.user?.role) ?? 'Admin') as 'Admin' | 'Editor' | 'Analyst';
+  const isAdmin = userRole === 'Admin';
   const saved = loadSettings();
+  const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'api' | 'data'>(
+    'general',
+  );
 
   const [language, setLanguage] = useState<string>((saved.language as string) || 'fr');
   const [timezone, setTimezone] = useState<string>((saved.timezone as string) || 'Africa/Abidjan');
@@ -79,6 +112,125 @@ export default function Settings() {
   const [creditLimitInput, setCreditLimitInput] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [balance, setBalance] = useState<BalanceData | null>(null);
+
+  // États clés API
+  const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(['messaging', 'contacts']);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [generatedKey, setGeneratedKey] = useState<NewApiKey | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [confirmedCopy, setConfirmedCopy] = useState(false);
+  const [devEmail, setDevEmail] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
+  const [keyStats, setKeyStats] = useState<Record<string, ApiKeyStats>>({});
+  const [loadingStatsId, setLoadingStatsId] = useState<string | null>(null);
+
+  const loadApiKeys = useCallback(() => {
+    setApiKeysLoading(true);
+    apiKeysApi
+      .list()
+      .then(setApiKeys)
+      .catch(() => toast.error('Impossible de charger les clés API'))
+      .finally(() => setApiKeysLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin) loadApiKeys();
+  }, [isAdmin, loadApiKeys]);
+
+  const scopesForGroups = (groups: string[]) =>
+    PERMISSION_GROUPS.filter((g) => groups.includes(g.id)).flatMap((g) => [...g.scopes]);
+
+  const handleCreateKey = async () => {
+    if (!newKeyName.trim()) {
+      toast.error('Donnez un nom à cette clé');
+      return;
+    }
+    if (selectedGroups.length === 0) {
+      toast.error('Sélectionnez au moins une permission');
+      return;
+    }
+    setCreatingKey(true);
+    try {
+      const scopes = scopesForGroups(selectedGroups);
+      const created = await apiKeysApi.create(newKeyName.trim(), scopes);
+      setGeneratedKey(created);
+      setShowCreateModal(false);
+      setNewKeyName('');
+      setSelectedGroups(['messaging', 'contacts']);
+      setConfirmedCopy(false);
+      setEmailSent(false);
+      setDevEmail('');
+      loadApiKeys();
+    } catch {
+      toast.error('Erreur lors de la création de la clé');
+    } finally {
+      setCreatingKey(false);
+    }
+  };
+
+  const handleRevokeKey = async (id: string, name: string) => {
+    if (!confirm(`Révoquer la clé "${name}" ? Elle ne fonctionnera plus immédiatement.`)) return;
+    setRevokingId(id);
+    try {
+      await apiKeysApi.revoke(id);
+      toast.success('Clé révoquée');
+      loadApiKeys();
+    } catch {
+      toast.error('Erreur lors de la révocation');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const toggleKeyStats = async (keyId: string) => {
+    if (expandedKeyId === keyId) {
+      setExpandedKeyId(null);
+      return;
+    }
+    setExpandedKeyId(keyId);
+    if (keyStats[keyId]) return;
+    setLoadingStatsId(keyId);
+    try {
+      const stats = await apiKeysApi.stats(keyId);
+      setKeyStats((prev) => ({ ...prev, [keyId]: stats }));
+    } catch {
+      toast.error('Impossible de charger les statistiques');
+    } finally {
+      setLoadingStatsId(null);
+    }
+  };
+
+  const copyKey = () => {
+    if (!generatedKey) return;
+    void navigator.clipboard.writeText(generatedKey.key).then(() => {
+      setKeyCopied(true);
+      setTimeout(() => setKeyCopied(false), 2000);
+    });
+  };
+
+  const handleSendToDev = async () => {
+    if (!generatedKey || !devEmail.includes('@')) {
+      toast.error('Adresse email invalide');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      await apiKeysApi.sendToDeveloper(devEmail, generatedKey.key, generatedKey.name);
+      setEmailSent(true);
+      toast.success(`Clé envoyée à ${devEmail}`);
+    } catch {
+      toast.error("Erreur lors de l'envoi");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   useEffect(() => {
     const fetchBalance = () => {
@@ -213,137 +365,100 @@ export default function Settings() {
     }
   };
 
+  const TABS: { id: 'general' | 'notifications' | 'api' | 'data'; label: string }[] = [
+    { id: 'general', label: 'Général' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'api', label: 'Clés API & Intégrations' },
+    { id: 'data', label: 'Données' },
+  ];
+
   return (
     <div className="content">
-      {/* En-tête */}
-      <div className="card" style={{ padding: '13px 16px' }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-12">
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                background: '#e0edef',
-                borderRadius: 10,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 14 14"
-                fill="none"
-                stroke="#0c5460"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="7" cy="7" r="1.5" />
-                <circle cx="7" cy="7" r="5" />
-                <path d="M7 2v1M7 11v1M2 7H1M13 7h-1M3.5 3.5l.7.7M9.8 9.8l.7.7M3.5 10.5l.7-.7M9.8 4.2l.7-.7" />
-              </svg>
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
-                Paramètres
-              </div>
-              <div style={{ fontSize: 10.5, color: 'var(--text-2)', marginTop: 2 }}>
-                Préférences de l'espace de travail
-              </div>
+      {/* En-tête + onglets */}
+      <div className="card" style={{ padding: '16px 20px 0', marginBottom: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Paramètres</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+              Préférences de l&apos;espace de travail
             </div>
           </div>
-          {balance &&
-            (() => {
-              const bMax =
-                balance.creditLimit && balance.creditLimit > 0
-                  ? balance.creditLimit
-                  : balance.alertThreshold && balance.alertThreshold > 0
-                    ? balance.alertThreshold * 3
-                    : null;
-              const bPct =
-                bMax != null
-                  ? Math.min(100, Math.round((Number(balance.creditBalance) / bMax) * 100))
-                  : 0;
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div
+          {balance && (
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#0f172a',
+                background: '#f1f5f9',
+                padding: '5px 12px',
+                borderRadius: 20,
+              }}
+            >
+              {Number(balance.creditBalance).toLocaleString('fr-FR')} FCFA
+            </div>
+          )}
+        </div>
+
+        {/* Barre d'onglets style underline */}
+        <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0' }}>
+          {TABS.map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  padding: '10px 16px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: active ? '2px solid #2563eb' : '2px solid transparent',
+                  marginBottom: -2,
+                  fontSize: 13,
+                  fontWeight: active ? 700 : 400,
+                  color: active ? '#2563eb' : '#64748b',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {tab.label}
+                {tab.id === 'api' && apiKeys.length > 0 && (
+                  <span
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '5px 12px',
-                      background: 'var(--muted)',
-                      borderRadius: 20,
+                      marginLeft: 6,
+                      background: active ? '#dbeafe' : '#f1f5f9',
+                      color: active ? '#1d4ed8' : '#64748b',
+                      borderRadius: 10,
+                      padding: '1px 7px',
+                      fontSize: 10,
+                      fontWeight: 700,
                     }}
                   >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      fill="none"
-                      stroke="var(--brand-primary)"
-                      strokeWidth="1.4"
-                    >
-                      <circle cx="6" cy="6" r="5" />
-                      <path d="M4.5 6l1 1 2-2" />
-                    </svg>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)' }}>
-                      {Number(balance.creditBalance).toLocaleString('fr-FR')} FCFA
-                    </span>
-                  </div>
-                  {bMax != null && (
-                    <div style={{ minWidth: 140 }}>
-                      <div
-                        style={{
-                          width: '100%',
-                          height: 5,
-                          borderRadius: 999,
-                          background: 'var(--border)',
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: `${bPct}%`,
-                            height: '100%',
-                            borderRadius: 999,
-                            background:
-                              bPct < 20
-                                ? 'var(--color-error, #ef4444)'
-                                : bPct < 50
-                                  ? '#f59e0b'
-                                  : 'var(--brand-gradient)',
-                            transition: 'width 0.4s ease',
-                          }}
-                        />
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {bPct}% · Alerte sous{' '}
-                        {(balance.alertThreshold ?? 100000).toLocaleString('fr-FR')} FCFA
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+                    {apiKeys.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))',
-          gap: 12,
-        }}
-      >
-        {/* Préférences générales */}
+      {/* ─── Onglet Général ─── */}
+      {activeTab === 'general' && (
         <div className="card">
-          <div className="card-title mb-12">Préférences générales</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card-title mb-16">Préférences générales</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 480 }}>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
-                Langue de l'interface
+              <div
+                style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}
+              >
+                Langue de l&apos;interface
               </div>
               <select
                 className="input"
@@ -355,7 +470,9 @@ export default function Settings() {
               </select>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
+              <div
+                style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}
+              >
                 Fuseau horaire
               </div>
               <select
@@ -382,8 +499,10 @@ export default function Settings() {
               </select>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
-                Seuil d'alerte crédits faibles (FCFA)
+              <div
+                style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}
+              >
+                Seuil d&apos;alerte crédits faibles (FCFA)
               </div>
               <input
                 type="number"
@@ -393,13 +512,15 @@ export default function Settings() {
                 onChange={(e) => setAlertThreshold(e.target.value)}
                 placeholder="ex: 100 000"
               />
-              <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>
                 Notification email quand le solde passe sous ce seuil
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 6 }}>
-                Limite d'utilisation (FCFA)
+              <div
+                style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}
+              >
+                Limite d&apos;utilisation (FCFA)
               </div>
               <input
                 type="number"
@@ -412,7 +533,7 @@ export default function Settings() {
               />
               <div
                 style={{
-                  fontSize: 10.5,
+                  fontSize: 11,
                   color:
                     creditLimitInput && balance && Number(creditLimitInput) > balance.creditBalance
                       ? 'var(--color-error, #ef4444)'
@@ -420,17 +541,24 @@ export default function Settings() {
                   marginTop: 4,
                 }}
               >
-                Jauge de crédit basée sur cette limite · doit être ≤ solde actuel
+                Doit être ≤ solde actuel
                 {balance ? ` (${balance.creditBalance.toLocaleString('fr-FR')} FCFA)` : ''}
               </div>
             </div>
+            <div style={{ paddingTop: 8 }}>
+              <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Notifications */}
+      {/* ─── Onglet Notifications ─── */}
+      {activeTab === 'notifications' && (
         <div className="card">
-          <div className="card-title mb-12">Notifications par email</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="card-title mb-16">Notifications par email</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 480 }}>
             <ToggleRow
               label="Campagnes envoyées"
               sub="Email à chaque envoi de campagne terminé"
@@ -459,64 +587,529 @@ export default function Settings() {
               checked={notifAutomations}
               onChange={setNotifAutomations}
             />
+            <div style={{ paddingTop: 8 }}>
+              <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* API Keys — bientôt disponible */}
-        <div className="card" style={{ opacity: 0.8 }}>
-          <div className="flex items-center justify-between mb-12">
-            <div className="card-title">Clés API</div>
-            <span className="chip">Bientôt disponible</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* ─── Onglet Clés API ─── */}
+      {activeTab === 'api' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="card">
+            {/* Titre + bouton créer */}
             <div
               style={{
-                padding: '16px',
-                background: 'var(--muted)',
-                borderRadius: 8,
-                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 16,
+                flexWrap: 'wrap',
+                gap: 12,
               }}
             >
-              <div style={{ fontSize: 22, marginBottom: 8 }}>🔑</div>
-              <div
-                style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>Clés API</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  Connectez votre site web, application mobile ou outil externe à NovaSMS
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                disabled={apiKeys.length >= 10}
+                style={{
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '10px 20px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: apiKeys.length >= 10 ? 'not-allowed' : 'pointer',
+                  opacity: apiKeys.length >= 10 ? 0.5 : 1,
+                }}
               >
-                Accès API REST — Bientôt disponible
-              </div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.6 }}>
-                Générez des clés API pour intégrer NovaSMS dans vos applications. Cette
-                fonctionnalité sera disponible prochainement.
-              </div>
+                + Générer une clé API
+              </button>
             </div>
+
+            {/* Avertissement */}
             <div
               style={{
                 padding: '10px 14px',
                 background: '#fffbeb',
-                border: '0.5px solid #fcd34d',
+                border: '1px solid #fcd34d',
                 borderRadius: 8,
+                marginBottom: 16,
+                fontSize: 12,
+                color: '#92400e',
               }}
             >
-              <div style={{ fontSize: 11, color: '#92400e' }}>
-                ⚠️ Les clés API donnent un accès programmatique complet à votre compte. Elles seront
-                générées de façon sécurisée.
+              ⚠️ Chaque clé donne un accès programmatique à votre compte. Gardez-les secrètes et ne
+              les partagez jamais publiquement.
+            </div>
+
+            {/* Liste des clés */}
+            {apiKeysLoading ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: '40px 0',
+                  color: 'var(--text-2)',
+                  fontSize: 13,
+                }}
+              >
+                Chargement…
               </div>
+            ) : apiKeys.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    background: '#f1f5f9',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 14px',
+                    fontSize: 22,
+                  }}
+                >
+                  🔑
+                </div>
+                <div
+                  style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', marginBottom: 6 }}
+                >
+                  Aucune clé créée
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-2)',
+                    maxWidth: 280,
+                    margin: '0 auto 16px',
+                  }}
+                >
+                  Créez une clé pour permettre à votre site ou application d&apos;utiliser NovaSMS
+                </div>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  style={{
+                    padding: '8px 18px',
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Générer ma première clé
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>
+                  {apiKeys.length}/10 clés utilisées
+                </div>
+                {apiKeys.map((k) => {
+                  const expired = k.expiresAt && new Date(k.expiresAt) < new Date();
+                  return (
+                    <div
+                      key={k.id}
+                      style={{
+                        border: '1px solid var(--border)',
+                        borderRadius: 10,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '14px 16px',
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
+                              {k.name}
+                            </span>
+                            {expired && (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  background: '#fee2e2',
+                                  color: '#b91c1c',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Expirée
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: 'var(--text-3)',
+                              marginBottom: 8,
+                            }}
+                          >
+                            {k.keyPrefix}••••••••{k.keySuffix}
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {PERMISSION_GROUPS.filter((g) =>
+                              g.scopes.some((s) => k.permissions.includes(s)),
+                            ).map((g) => (
+                              <span
+                                key={g.id}
+                                style={{
+                                  fontSize: 10,
+                                  background: '#eff6ff',
+                                  color: '#2563eb',
+                                  padding: '2px 7px',
+                                  borderRadius: 12,
+                                  fontWeight: 500,
+                                }}
+                              >
+                                {g.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            textAlign: 'right',
+                            fontSize: 11,
+                            color: 'var(--text-2)',
+                            flexShrink: 0,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-end',
+                            gap: 6,
+                          }}
+                        >
+                          <span>
+                            {k.lastUsedAt
+                              ? `Utilisée le ${new Date(k.lastUsedAt).toLocaleDateString('fr-FR')}`
+                              : 'Jamais utilisée'}
+                          </span>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button
+                              onClick={() => void toggleKeyStats(k.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '5px 10px',
+                                background: expandedKeyId === k.id ? '#eff6ff' : 'var(--muted)',
+                                border: 'none',
+                                borderRadius: 6,
+                                fontSize: 11,
+                                cursor: 'pointer',
+                                color: expandedKeyId === k.id ? '#2563eb' : 'var(--text-2)',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {loadingStatsId === k.id
+                                ? '…'
+                                : expandedKeyId === k.id
+                                  ? '▲ Usage'
+                                  : '▼ Usage'}
+                            </button>
+                            <button
+                              onClick={() => void handleRevokeKey(k.id, k.name)}
+                              disabled={revokingId === k.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '5px 10px',
+                                background: '#fff0f0',
+                                border: 'none',
+                                borderRadius: 6,
+                                fontSize: 11,
+                                cursor: 'pointer',
+                                color: '#dc2626',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {revokingId === k.id ? '…' : 'Révoquer'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {expandedKeyId === k.id && (
+                        <div
+                          style={{
+                            borderTop: '1px solid var(--border)',
+                            padding: '14px 16px',
+                            background: '#f8fafc',
+                          }}
+                        >
+                          {loadingStatsId === k.id || !keyStats[k.id] ? (
+                            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Chargement…</div>
+                          ) : (
+                            <>
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(3, 1fr)',
+                                  gap: 10,
+                                  marginBottom: 12,
+                                }}
+                              >
+                                {[
+                                  { v: keyStats[k.id].callsToday, l: "Appels aujourd'hui" },
+                                  { v: keyStats[k.id].callsThisMonth, l: 'Appels ce mois' },
+                                  {
+                                    v:
+                                      keyStats[k.id].creditsThisMonth > 0
+                                        ? `${keyStats[k.id].creditsThisMonth.toLocaleString('fr-FR')} F`
+                                        : '—',
+                                    l: 'Crédits dépensés',
+                                  },
+                                ].map(({ v, l }) => (
+                                  <div
+                                    key={l}
+                                    style={{
+                                      textAlign: 'center',
+                                      padding: 10,
+                                      background: '#fff',
+                                      borderRadius: 8,
+                                      border: '1px solid var(--border)',
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: 18,
+                                        fontWeight: 800,
+                                        color: 'var(--text-1)',
+                                      }}
+                                    >
+                                      {v}
+                                    </div>
+                                    <div
+                                      style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 3 }}
+                                    >
+                                      {l}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {keyStats[k.id].recentLogs.length > 0 && (
+                                <div>
+                                  <div
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      color: 'var(--text-3)',
+                                      marginBottom: 6,
+                                      textTransform: 'uppercase',
+                                      letterSpacing: 0.5,
+                                    }}
+                                  >
+                                    10 derniers appels
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                    {keyStats[k.id].recentLogs.map((log, i) => (
+                                      <div
+                                        key={i}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: 8,
+                                          fontSize: 11,
+                                          padding: '4px 8px',
+                                          background: '#fff',
+                                          borderRadius: 5,
+                                        }}
+                                      >
+                                        <span
+                                          style={{
+                                            fontSize: 10,
+                                            background:
+                                              log.statusCode < 300 ? '#d1fae5' : '#fee2e2',
+                                            color: log.statusCode < 300 ? '#065f46' : '#991b1b',
+                                            padding: '1px 5px',
+                                            borderRadius: 4,
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          {log.statusCode}
+                                        </span>
+                                        <span
+                                          style={{
+                                            flex: 1,
+                                            fontFamily: 'monospace',
+                                            fontSize: 10,
+                                            color: 'var(--text-2)',
+                                          }}
+                                        >
+                                          {log.endpoint}
+                                        </span>
+                                        {Number(log.creditsUsed) > 0 && (
+                                          <span style={{ fontSize: 10, color: '#d97706' }}>
+                                            {Number(log.creditsUsed)} F
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                                          {new Date(log.createdAt).toLocaleTimeString('fr-FR', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Intégrations sans code */}
+          <div className="card">
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                Connecter NovaSMS à vos outils
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                Automatisez vos envois sans écrire une ligne de code grâce à ces intégrations.
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {[
+                {
+                  name: 'Zapier',
+                  desc: 'Reliez NovaSMS à plus de 6 000 applications',
+                  color: '#FF4A00',
+                  soon: true,
+                },
+                {
+                  name: 'Make',
+                  desc: "Créez des scénarios d'automatisation visuels",
+                  color: '#6D00CC',
+                  soon: true,
+                },
+                {
+                  name: 'WordPress',
+                  desc: 'Plugin NovaSMS pour votre site WordPress',
+                  color: '#21759B',
+                  soon: true,
+                },
+                {
+                  name: 'n8n',
+                  desc: 'Automatisez vos workflows open-source',
+                  color: '#EA4B71',
+                  soon: true,
+                },
+              ].map((intg) => (
+                <div
+                  key={intg.name}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 16px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 38,
+                      height: 38,
+                      background: intg.color,
+                      borderRadius: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>
+                      {intg.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}
+                    >
+                      {intg.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.4 }}>
+                      {intg.desc}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      fontSize: 10,
+                      background: '#f1f5f9',
+                      color: '#64748b',
+                      padding: '3px 8px',
+                      borderRadius: 20,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Bientôt
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
+      )}
 
-        {/* Données & confidentialité */}
+      {/* ─── Onglet Données ─── */}
+      {activeTab === 'data' && (
         <div className="card">
-          <div className="card-title mb-12">Données & confidentialité</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ padding: '12px 14px', background: 'var(--muted)', borderRadius: 8 }}>
+          <div className="card-title mb-16">Données & confidentialité</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 480 }}>
+            <div style={{ padding: '14px 16px', background: 'var(--muted)', borderRadius: 10 }}>
               <div
-                style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}
+                style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}
               >
                 Exporter mes données
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>
-                Téléchargez l'ensemble de vos données (contacts, campagnes, analytics) au format
-                JSON/CSV.
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
+                Téléchargez l&apos;ensemble de vos données (contacts, campagnes, analytics) au
+                format JSON/CSV.
               </div>
               <button
                 className="btn-sm"
@@ -536,21 +1129,23 @@ export default function Settings() {
                     .catch(() => toast.error("Erreur lors de l'export"));
                 }}
               >
-                Demander l'export
+                Demander l&apos;export
               </button>
             </div>
-            <div style={{ padding: '12px 14px', background: 'var(--muted)', borderRadius: 8 }}>
+
+            <div style={{ padding: '14px 16px', background: 'var(--muted)', borderRadius: 10 }}>
               <div
-                style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text-1)', marginBottom: 4 }}
+                style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 4 }}
               >
                 Conformité RGPD
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
                 NovaSMS est conforme au Règlement Général sur la Protection des Données. Vos données
                 sont hébergées en Europe.
               </div>
               <span className="tag green">Conforme RGPD</span>
             </div>
+
             <button
               onClick={() => {
                 logout();
@@ -560,13 +1155,13 @@ export default function Settings() {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '8px 12px',
+                padding: '10px 14px',
                 background: '#feecec',
                 color: '#7f1d1d',
                 border: '1px solid #f5c2c2',
                 borderRadius: 8,
                 cursor: 'pointer',
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: 500,
               }}
             >
@@ -585,25 +1180,332 @@ export default function Settings() {
             </button>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Bouton enregistrer */}
-      <div className="card" style={{ padding: '12px 16px' }}>
-        <div className="flex items-center justify-between">
-          <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
-            Les modifications sont enregistrées sur votre navigateur et synchronisées avec le
-            serveur.
-          </div>
-          <button
-            className="btn-primary"
-            onClick={handleSave}
-            disabled={saving}
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+      {/* ══ MODAL : Créer une clé ══ */}
+      {showCreateModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              padding: 28,
+              width: '100%',
+              maxWidth: 460,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+            }}
           >
-            {saving ? 'Enregistrement…' : 'Enregistrer les préférences'}
-          </button>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
+              Nouvelle clé API
+            </div>
+            <p style={{ margin: '0 0 20px', fontSize: 12, color: '#64748b' }}>
+              Cette clé permettra à votre site ou application de communiquer avec NovaSMS.
+            </p>
+
+            <label
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#475569',
+                display: 'block',
+                marginBottom: 6,
+              }}
+            >
+              Donnez un nom à cette clé pour vous y retrouver
+            </label>
+            <input
+              className="input"
+              placeholder="Ex : Mon site e-commerce, Application mobile…"
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              style={{ marginBottom: 20, width: '100%', boxSizing: 'border-box' }}
+              autoFocus
+            />
+
+            <label
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#475569',
+                display: 'block',
+                marginBottom: 10,
+              }}
+            >
+              Que pourra faire cette clé ?
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }}>
+              {PERMISSION_GROUPS.map((g) => (
+                <label
+                  key={g.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 10,
+                    cursor: 'pointer',
+                    padding: '10px 12px',
+                    background: selectedGroups.includes(g.id) ? '#f0f7ff' : '#f8fafc',
+                    borderRadius: 8,
+                    border: `1px solid ${selectedGroups.includes(g.id) ? '#bfdbfe' : 'transparent'}`,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedGroups.includes(g.id)}
+                    onChange={(e) =>
+                      setSelectedGroups((prev) =>
+                        e.target.checked ? [...prev, g.id] : prev.filter((x) => x !== g.id),
+                      )
+                    }
+                    style={{ marginTop: 2, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{g.label}</div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                      {g.description}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  color: '#475569',
+                  fontWeight: 500,
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                disabled={creatingKey}
+                onClick={() => void handleCreateKey()}
+                style={{
+                  flex: 2,
+                  padding: '10px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: creatingKey ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {creatingKey ? 'Création…' : 'Créer la clé'}
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ══ MODAL : Clé générée ══ */}
+      {generatedKey && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              padding: 28,
+              width: '100%',
+              maxWidth: 500,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  background: '#d1fae5',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                }}
+              >
+                🔑
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                Votre clé a été créée
+              </div>
+            </div>
+
+            <div
+              style={{
+                margin: '14px 0',
+                padding: '10px 14px',
+                background: '#fef3c7',
+                border: '1px solid #fcd34d',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#78350f',
+                fontWeight: 500,
+              }}
+            >
+              ⚠ Copiez cette clé maintenant. Pour des raisons de sécurité, elle ne sera{' '}
+              <strong>plus jamais affichée</strong> après fermeture.
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                background: '#f1f5f9',
+                borderRadius: 8,
+                padding: '12px 14px',
+                marginBottom: 16,
+                alignItems: 'center',
+              }}
+            >
+              <code
+                style={{
+                  flex: 1,
+                  fontSize: 12,
+                  wordBreak: 'break-all',
+                  color: '#0f172a',
+                  fontFamily: 'monospace',
+                  lineHeight: 1.5,
+                }}
+              >
+                {generatedKey.key}
+              </code>
+              <button
+                onClick={copyKey}
+                style={{
+                  flexShrink: 0,
+                  padding: '7px 12px',
+                  background: keyCopied ? '#dcfce7' : '#2563eb',
+                  color: keyCopied ? '#15803d' : '#fff',
+                  border: 'none',
+                  borderRadius: 7,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {keyCopied ? '✓ Copié' : 'Copier'}
+              </button>
+            </div>
+
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                marginBottom: 20,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={confirmedCopy}
+                onChange={(e) => setConfirmedCopy(e.target.checked)}
+              />
+              <span style={{ fontSize: 12, color: '#475569' }}>
+                J&apos;ai bien copié et sauvegardé cette clé
+              </span>
+            </label>
+
+            <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 8 }}>
+                ✉ Envoyer cette clé à votre développeur par email
+              </div>
+              {emailSent ? (
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    background: '#d1fae5',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    color: '#065f46',
+                    fontWeight: 500,
+                  }}
+                >
+                  ✓ Email envoyé à {devEmail} — votre développeur reçoit la clé et la documentation.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="email"
+                    className="input"
+                    placeholder="developpeur@agence.com"
+                    value={devEmail}
+                    onChange={(e) => setDevEmail(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    onClick={() => void handleSendToDev()}
+                    disabled={sendingEmail || !devEmail.includes('@')}
+                    style={{
+                      flexShrink: 0,
+                      padding: '7px 14px',
+                      background: '#f0fdf4',
+                      color: '#15803d',
+                      border: '1px solid #86efac',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {sendingEmail ? 'Envoi…' : 'Envoyer'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setGeneratedKey(null)}
+              disabled={!confirmedCopy}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: confirmedCopy ? '#2563eb' : '#e2e8f0',
+                color: confirmedCopy ? '#fff' : '#94a3b8',
+                border: 'none',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: confirmedCopy ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {confirmedCopy ? 'Terminé' : 'Confirmez avoir copié la clé avant de fermer'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

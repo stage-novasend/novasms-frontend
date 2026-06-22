@@ -217,9 +217,13 @@ const CampaignListDashboard: FC = () => {
         </Link>
         <button
           onClick={async () => {
-            const duplicated = await duplicateCampaign(campaign);
-            toast.success('Campagne dupliquée');
-            navigate(`/campaigns/${duplicated.id}/edit`);
+            try {
+              const duplicated = await duplicateCampaign(campaign);
+              toast.success('Campagne dupliquée');
+              navigate(`/campaigns/${duplicated.id}/edit`);
+            } catch {
+              toast.error('Impossible de dupliquer la campagne');
+            }
           }}
           className="rounded-lg p-2 text-on-surface-variant transition hover:bg-surface-container hover:text-on-surface"
           title="Dupliquer"

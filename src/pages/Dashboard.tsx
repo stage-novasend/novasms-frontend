@@ -279,6 +279,7 @@ export default function Dashboard() {
         setContactsAddedToday(0);
         setCreditBalance(null);
         setCreditThreshold(null);
+        setCreditLimit(null);
       }
     };
 
