@@ -1,7 +1,6 @@
-import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import type { AppRole } from '@/config/roles';
-import { FALLBACK_REDIRECT } from '@/config/roles';
+import ForbiddenPage from '@/components/ForbiddenPage';
 
 type Props = {
   roles: AppRole[];
@@ -12,9 +11,10 @@ export default function RoleGuard({ roles, children }: Props) {
   const user = useAuthStore((s) => s.user);
   const role = (user?.role ?? 'Admin') as AppRole;
 
-  if (!roles.includes(role)) {
-    return <Navigate to={FALLBACK_REDIRECT[role]} replace />;
+  // Admin a accès à tout le site sans restriction
+  if (role === 'Admin' || roles.includes(role)) {
+    return <>{children}</>;
   }
 
-  return <>{children}</>;
+  return <ForbiddenPage />;
 }

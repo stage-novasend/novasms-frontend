@@ -18,11 +18,7 @@ type ParsedImportData = {
   preview: Record<string, unknown>[];
 };
 
-const SUPPORTED_FORMATS = [
-  'text/csv',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-];
+const SUPPORTED_FORMATS = ['text/csv', 'application/vnd.ms-excel'];
 
 export default function ImportModal({ isOpen, onClose, onImportComplete }: ImportModalProps) {
   const { accessToken } = useAuthStore();
@@ -305,7 +301,7 @@ export default function ImportModal({ isOpen, onClose, onImportComplete }: Impor
                 <div className="border-2 border-dashed border-outline-variant rounded-xl p-8 text-center hover:border-primary/50 transition-colors">
                   <input
                     type="file"
-                    accept=".csv,.xls,.xlsx"
+                    accept=".csv,.xls"
                     onChange={handleFileSelect}
                     className="hidden"
                     id="file-input"

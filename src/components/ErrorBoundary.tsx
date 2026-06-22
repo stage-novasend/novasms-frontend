@@ -8,13 +8,14 @@ interface Props {
 interface State {
   hasError: boolean;
   errorId: string;
+  errorMessage: string;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false, errorId: '' };
+  state: State = { hasError: false, errorId: '', errorMessage: '' };
 
-  static getDerivedStateFromError(): Partial<State> {
-    return { hasError: true, errorId: crypto.randomUUID() };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return { hasError: true, errorId: crypto.randomUUID(), errorMessage: error.message };
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
@@ -55,6 +56,23 @@ export class ErrorBoundary extends Component<Props, State> {
           >
             Un problème inattendu s'est produit. Vos données sont en sécurité.
           </p>
+          {import.meta.env.DEV && this.state.errorMessage && (
+            <pre
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontSize: 12,
+                color: '#b91c1c',
+                maxWidth: 500,
+                overflow: 'auto',
+                textAlign: 'left',
+              }}
+            >
+              {this.state.errorMessage}
+            </pre>
+          )}
           <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
             <button
               onClick={this.handleReset}
