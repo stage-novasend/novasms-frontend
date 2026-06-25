@@ -94,8 +94,9 @@ export default function Settings() {
   const userRole = (useAuthStore((s) => s.user?.role) ?? 'Admin') as 'Admin' | 'Editor' | 'Analyst';
   const isAdmin = userRole === 'Admin';
   const saved = loadSettings();
+  const initialTab = window.location.pathname === '/account/developers' ? 'api' : 'general';
   const [activeTab, setActiveTab] = useState<'general' | 'notifications' | 'api' | 'data'>(
-    'general',
+    initialTab,
   );
 
   const [language, setLanguage] = useState<string>((saved.language as string) || 'fr');
