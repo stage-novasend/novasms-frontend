@@ -1,0 +1,35 @@
+name: Deploy CapRover
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-nova-sms-front
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pack source
+        run: |
+          COPYFILE_DISABLE=1 tar \
+            --exclude='./.git' \
+            --exclude='./node_modules' \
+            --exclude='./dist' \
+            --exclude='./.vite' \
+            --exclude='./test-results' \
+            --exclude='./playwright-report' \
+            --exclude='./.github' \
+            -cf ./deploy.tar .
+
+      - name: Deploy to CapRover
+        uses: caprover/deploy-from-github@v1.1.2
+        with:
+          server: ${{ secrets.CAPROVER_SERVER }}
+          app: nova-sms-front
+          token: ${{ secrets.CAPROVER_APP_TOKEN }}
