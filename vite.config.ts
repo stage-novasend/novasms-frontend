@@ -6,6 +6,11 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   plugins: [react()],
 
+  // Vite 8 / lightningcss native bindings cassent souvent en Docker (musl/gnu).
+  build: {
+    cssMinify: 'esbuild',
+  },
+
   server: {
     allowedHosts: true,
     proxy: {

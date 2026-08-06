@@ -2,12 +2,16 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
-# Alpine/musl casse lightningcss (Vite 8) : binding linux-x64-musl manquant.
+# Force cache bust + éviter lightningcss natif (bindings optionnels absents en CI/Docker).
+ARG BUILD_ID=manual
+RUN echo "build-id=$BUILD_ID"
+
 COPY package*.json ./
 RUN npm install --no-audit --no-fund \
   --fetch-retries=5 \
   --fetch-retry-mintimeout=20000 \
-  --fetch-retry-maxtimeout=120000
+  --fetch-retry-maxtimeout=120000 \
+  && npm install --no-save --no-audit --no-fund lightningcss-linux-x64-gnu || true
 
 COPY . .
 
